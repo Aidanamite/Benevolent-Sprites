@@ -1,0 +1,142 @@
+{
+  "name": "Benevolent Sprites",
+  "author": "Aidanamite",
+  "description": "Adds some helpful little friends",
+  "version": "1.8.7",
+  "license": "GNU AGPLv3",
+  "icon": "icon.png",
+  "banner": "banner.jpg",
+  "gameVersion": "1.0",
+  "requiredByAllPlayers": true,
+  "updateUrl": "https://www.raftmodding.com/api/v1/mods/benevolent-sprites/version.txt",
+  "isModPermanent": false,
+  "excludedFiles": [],
+  "modSettings": [
+    {
+      "name": "playSound",
+      "text": "Play Deposit Sounds",
+      "type": "checkbox",
+      "default": true
+    },
+    {
+      "name": "leaveItem",
+      "text": "Leave Item Mode",
+      "type": "combobox",
+      "default": "None",
+      "values": [ "None", "Specific", "All" ]
+    },
+    {
+      "name": "lightMode",
+      "text": "Light Mode",
+      "type": "combobox",
+      "default": "No Shadows",
+      "values": [ "Disabled", "No Shadows", "Shadows" ]
+    },
+    {
+      "name": "Ranges:",
+      "type": "text"
+    },
+    {
+      "name": "spriteRange",
+      "text": "Base Sprite Range Multiplier",
+      "type": "input",
+      "default": "0.5",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "repelRange",
+      "text": "Sprite Repellent Range",
+      "type": "input",
+      "default": "1.5",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "gardenRange",
+      "text": "Garden Sprite Range Multiplier",
+      "type": "input",
+      "default": "1",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "animalRange",
+      "text": "Animal Sprite Range Multiplier",
+      "type": "input",
+      "default": "1",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "fireRange",
+      "text": "Fire Sprite Range Multiplier (Cooking Stand)",
+      "type": "input",
+      "default": "1",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "fire2Range",
+      "text": "Fire Sprite Range Multiplier (Cooking Table)",
+      "type": "input",
+      "default": "1",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "cleanerRange",
+      "text": "Cleaner Sprite Range Multiplier",
+      "type": "input",
+      "default": "1",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "mechanicRange",
+      "text": "Mechanic Sprite Range Multiplier",
+      "type": "input",
+      "default": "1",
+      "mode": "DecimalNumber"
+    },
+    {
+      "name": "Exclusive Collection:",
+      "type": "text"
+    },
+    {
+      "name": "gardenCollect",
+      "text": "Garden Sprite",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "name": "animalCollect",
+      "text": "Animal Sprite (Animal)",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "name": "animal2Collect",
+      "text": "Animal Sprite (Beehive)",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "name": "animal3Collect",
+      "text": "Animal Sprite (Birdnest)",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "name": "fireCollect",
+      "text": "Fire Sprite (Cooking Stand)",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "name": "fire2Collect",
+      "text": "Fire Sprite (Cooking Table)",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "name": "cleanCollect",
+      "text": "Cleaner Sprite",
+      "type": "checkbox",
+      "default": false
+    }
+  ]
+}
