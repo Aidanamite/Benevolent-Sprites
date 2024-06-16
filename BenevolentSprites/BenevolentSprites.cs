@@ -1854,7 +1854,7 @@ namespace BenevolentSprites
         {
             if (string.IsNullOrEmpty(data))
                 return;
-            if (targetObject.GetComponent<Cropplot>())
+            if (targetObject && targetObject.GetComponent<Cropplot>())
                 targeted[this] = targetObject.GetComponent<Cropplot>().plantationSlots[int.Parse( data)];
         }
         public override string GenerateData()
@@ -2098,7 +2098,8 @@ namespace BenevolentSprites
 
         public override void RestoreData(string data)
         {
-            targeted[this] = targetObject.GetComponent<MonoBehaviour_ID>();
+            if (targetObject)
+                targeted[this] = targetObject.GetComponent<MonoBehaviour_ID>();
         }
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
@@ -2547,7 +2548,8 @@ namespace BenevolentSprites
 
         public override void RestoreData(string data)
         {
-            targeted[this] = targetObject.GetComponent<CookingTable>();
+            if (targetObject)
+                targeted[this] = targetObject.GetComponent<CookingTable>();
             Recipe = BenevolentSprites.GetRecipeFromIndex(int.Parse(data));
         }
 
@@ -2758,7 +2760,8 @@ namespace BenevolentSprites
 
         public override void RestoreData(string data)
         {
-            targeted[this] = targetObject.GetComponent<MonoBehaviour_ID>();
+            if (targetObject)
+                targeted[this] = targetObject.GetComponent<MonoBehaviour_ID>();
         }
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
@@ -3446,6 +3449,7 @@ namespace BenevolentSprites
         public const int ClearTable = 9;
         public const int ClearAll = 10;
         public const int ClearFish = 11;
+        public const int RequestMissing = 12;
         public static Dictionary<int, Type> MessageTypes = new Dictionary<int, Type>
         {
             [Create] = typeof(Message_Sprite_Create),
@@ -3459,7 +3463,8 @@ namespace BenevolentSprites
             [InsertTable] = typeof(Message_Sprite_InsertTable),
             [ClearTable] = typeof(Message_Sprite_ClearTable),
             [ClearAll] = typeof(Message_Sprite_ClearAll),
-            [ClearFish] = typeof(Message_Sprite_ClearFish)
+            [ClearFish] = typeof(Message_Sprite_ClearFish),
+            [RequestMissing] = typeof(Message_Sprite_RequestMissing)
         };
         public static Network_Player DummyPlayer = BenevolentSprites.CreateFakePlayer();
 
@@ -3491,6 +3496,8 @@ namespace BenevolentSprites
                     return "Empty Item Net";
                 case ClearFish:
                     return "Empty Fishing Net";
+                case RequestMissing:
+                    return "Request Missing Sprites";
             }
             return "Unknown (" + msgId + ")";
         }
@@ -3598,7 +3605,6 @@ namespace BenevolentSprites
                 foreach (var sprite in BenevolentSprites.sprites)
                     if (sprite.ObjectIndex == spriteIndex)
                         return sprite;
-                BenevolentSprites.MissingIndecies.Add(spriteIndex);
                 Debug.LogWarning($"[Benevolent Sprites]: Failed to find sprite with index {spriteIndex}");
                 return null;
             }
