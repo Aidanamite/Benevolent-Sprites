@@ -19,6 +19,9 @@ using System.Runtime.Serialization;
 using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
+using static BenevolentSprites.BenevolentSprites;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace BenevolentSprites
 {
@@ -154,8 +157,8 @@ namespace BenevolentSprites
                     for (int y = 0; y < texture.height; y++)
                     {
                         var c = baseSpriteTex.GetPixel(x, y);
-                        var b = Mathf.Max(c.r * 2 - 1, 0);
-                        var s = Mathf.Min(c.r * 2, 1);
+                        var b = Math.Max(c.r * 2 - 1, 0);
+                        var s = Math.Min(c.r * 2, 1);
 
                         if (c.a == 0)
                             texture.SetPixel(x, y, Color.clear);
@@ -270,8 +273,8 @@ namespace BenevolentSprites
                     for (int y = 0; y < texture.height; y++)
                     {
                         var c = baseTex.GetPixel(x, y);
-                        var b = Mathf.Max(c.r * 2 - 1, 0);
-                        var s = Mathf.Min(c.r * 2, 1);
+                        var b = Math.Max(c.r * 2 - 1, 0);
+                        var s = Math.Min(c.r * 2, 1);
 
                         if (c.a == 0)
                             texture.SetPixel(x, y, Color.clear);
@@ -446,18 +449,24 @@ namespace BenevolentSprites
 
         public void Update()
         {
-            for (int i = sprites.Count - 1; i >= 0; i--)
-                try
-                {
-                    if (sprites[i].IsDead)
-                        sprites.RemoveAt(i);
-                    else
-                        sprites[i].Update(Time.deltaTime);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError(e);
-                }
+            if (Time.deltaTime > 0)
+                for (int i = sprites.Count - 1; i >= 0; i--)
+                    try
+                    {
+                        //GetSystemTimeAsFileTime(out var start);
+                        if (sprites[i].IsDead)
+                            sprites.RemoveAt(i);
+                        else
+                            sprites[i].Update(Time.deltaTime);
+                        //GetSystemTimeAsFileTime(out var end);
+                        //var span = (end - start) / 10000.0;
+                        //if (span > 10)
+                        //    Debug.Log($"Too long sprite time {i} {sprites[i]} took {span} ms");
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError(e);
+                    }
             if (MissingIndecies.Count > 0)
             {
                 new Message_Sprite_RequestMissing(MissingIndecies.ToArray()).Message.Send(ComponentManager<Raft_Network>.Value.HostID);
@@ -706,6 +715,9 @@ namespace BenevolentSprites
                 DummyPlayer.SetIsLocalPlayer(true);
             return DummyPlayer;
         }
+
+        [DllImport("kernel32")]
+        public static extern void GetSystemTimeAsFileTime(out long value);
     }
 
     static class ExtentionMethods
@@ -750,14 +762,17 @@ namespace BenevolentSprites
         [Accessor(AccessorType.Method, typeof(ItemCollector), "ClearCollectedItems")]
         public static void ClearCollectedItems(this ItemCollector collector, Network_Player player) { }
 
+        [Accessor(AccessorType.Field, typeof(List<Slot>), "_items")]
+        public static Slot[] GetInternal(this List<Slot> slots) => default;
+
         public static void SetupFishingNetMethods()
         {
-            _fishingNet = BenevolentSprites.fishingnet.GetField("fishingNet", ~BindingFlags.Default);
-            _fishCount = BenevolentSprites.fishingnet.GetField("fishCount", ~BindingFlags.Default);
-            _caughtFish = BenevolentSprites.fishingnet.GetField("caughtFish", ~BindingFlags.Default);
-            _caughtFishItem = BenevolentSprites.fishingnet.GetField("caughtFishItem", ~BindingFlags.Default);
-            _netFull = BenevolentSprites.fishingnet.GetField("netFull", ~BindingFlags.Default);
-            _DisableModels = BenevolentSprites.arashiObjectEnabler.GetMethod("DisableModels", ~BindingFlags.Default);
+            _fishingNet = fishingnet.GetField("fishingNet", ~BindingFlags.Default);
+            _fishCount = fishingnet.GetField("fishCount", ~BindingFlags.Default);
+            _caughtFish = fishingnet.GetField("caughtFish", ~BindingFlags.Default);
+            _caughtFishItem = fishingnet.GetField("caughtFishItem", ~BindingFlags.Default);
+            _netFull = fishingnet.GetField("netFull", ~BindingFlags.Default);
+            _DisableModels = arashiObjectEnabler.GetMethod("DisableModels", ~BindingFlags.Default);
         }
         static FieldInfo _fishingNet;
         public static Block FishingNet_Block(this MonoBehaviour net) => (Block)_fishingNet.GetValue(net);
@@ -776,9 +791,15 @@ namespace BenevolentSprites
 
         public static void SetupDredgerMethods()
         {
-            _currentItem = BenevolentSprites.dredger_network.GetField("currentItem", ~BindingFlags.Default);
-            _basket = BenevolentSprites.dredger_network.GetField("basket", ~BindingFlags.Default);
-            _PickupItem = BenevolentSprites.dredger_network.GetMethod("PickupItem", ~BindingFlags.Default);
+            _currentItem = dredger_network.GetField("currentItem", ~BindingFlags.Default);
+            _basket = dredger_network.GetField("basket", ~BindingFlags.Default);
+            _dredgerType = dredger_network.GetField("dredgerType", ~BindingFlags.Default);
+            _PickupItem = dredger_network.GetMethod("PickupItem", ~BindingFlags.Default);
+            _DropDredger = dredger_network.GetMethod("DropDredger", ~BindingFlags.Default);
+            _RaiseDredger = dredger_network.GetMethod("RaiseDredger", ~BindingFlags.Default);
+            _IsDropped = dredger_network.GetProperty("IsDropped", ~BindingFlags.Default).GetGetMethod();
+            _IsRising = dredger_network.GetProperty("IsRising", ~BindingFlags.Default).GetGetMethod();
+            _ItemInBasket = dredger_basket.GetProperty("ItemInBasket", ~BindingFlags.Default).GetGetMethod();
         }
         static FieldInfo _currentItem;
         public static Item_Base Dredger_CurrentItem(this MonoBehaviour dredger) => (Item_Base)_currentItem.GetValue(dredger);
@@ -786,12 +807,25 @@ namespace BenevolentSprites
         public static MonoBehaviour Dredger_Basket(this MonoBehaviour dredger) => (MonoBehaviour)_basket.GetValue(dredger);
         static MethodInfo _PickupItem;
         public static void Dredger_PickupItem(this MonoBehaviour dredger, Network_Player player) => _PickupItem.Invoke(dredger, new[] { player });
+        static MethodInfo _DropDredger;
+        public static void Dredger_DropDredger(this MonoBehaviour dredger, bool sendMessage = true) => _DropDredger.Invoke(dredger, new object[] { sendMessage });
+        static MethodInfo _RaiseDredger;
+        public static void Dredger_RaiseDredger(this MonoBehaviour dredger, bool sendMessage = true) => _RaiseDredger.Invoke(dredger, new object[] { sendMessage });
+        static MethodInfo _IsDropped;
+        public static bool Dredger_IsDropped(this MonoBehaviour dredger) => (bool)_IsDropped.Invoke(dredger, new object[0]);
+        static MethodInfo _IsRising;
+        public static bool Dredger_IsRising(this MonoBehaviour dredger) => (bool)_IsRising.Invoke(dredger, new object[0]);
+        static FieldInfo _dredgerType;
+        public static int Dredger_Type(this MonoBehaviour dredger) => ((IConvertible)_dredgerType.GetValue(dredger)).ToInt32(CultureInfo.InvariantCulture);
+        public static bool Dredger_IsManual(this MonoBehaviour dredger) => dredger.Dredger_Type() == 0;
+        static MethodInfo _ItemInBasket;
+        public static bool DredgerBasket_ItemInBasket(this MonoBehaviour dredger_basket) => (bool)_ItemInBasket.Invoke(dredger_basket, new object[0]);
 
 
         public static Sprite GetReadable(this Sprite source)
         {
             var s = Sprite.Create(source.texture.GetReadable(), source.rect, source.pivot, source.pixelsPerUnit);
-            BenevolentSprites.createdObjects.Add(s);
+            createdObjects.Add(s);
             return s;
         }
 
@@ -804,7 +838,7 @@ namespace BenevolentSprites
             Texture2D texture = new Texture2D(source.width, source.height);
             texture.ReadPixels(new Rect(0, 0, temp.width, temp.height), 0, 0);
             texture.Apply();
-            BenevolentSprites.createdObjects.Add(texture);
+            createdObjects.Add(texture);
             RenderTexture.active = prev;
             RenderTexture.ReleaseTemporary(temp);
             return texture;
@@ -812,7 +846,7 @@ namespace BenevolentSprites
         public static Sprite CreateEmpty(this Sprite sprite)
         {
             var s =  Sprite.Create(new Texture2D(sprite.texture.width, sprite.texture.height, TextureFormat.RGBA32, false), sprite.rect, sprite.pivot, sprite.pixelsPerUnit);
-            BenevolentSprites.createdObjects.Add(s);
+            createdObjects.Add(s);
             return s;
         }
         public static Item_Base Clone(this Item_Base source, int uniqueIndex, string uniqueName)
@@ -826,7 +860,7 @@ namespace BenevolentSprites
             item.settings_Inventory = source.settings_Inventory.Clone();
             item.settings_recipe = source.settings_recipe.Clone();
             item.settings_usable = source.settings_usable.Clone();
-            BenevolentSprites.createdObjects.Add(item);
+            createdObjects.Add(item);
             return item;
         }
 
@@ -841,12 +875,12 @@ namespace BenevolentSprites
             return slot.HasValidItemInstance() && slot.itemInstance.UniqueName.IsSprite();
         }
 
-        public static bool IsSprite(this string uniqueName) => BenevolentSprites.spriteItems.ContainsKey(uniqueName);
+        public static bool IsSprite(this string uniqueName) => spriteItems.ContainsKey(uniqueName);
         public static bool IsSprite(this Item_Base item) => item.UniqueName.IsSprite();
 
         public static HelperSprite GetSprite(this Slot slot)
         {
-            foreach (var sprite in BenevolentSprites.sprites)
+            foreach (var sprite in sprites)
                 if (sprite.store == slot)
                     return sprite;
             return null;
@@ -1031,31 +1065,23 @@ namespace BenevolentSprites
                     }
         }
 
-        public static CookingTable_Recipe_UI FindRecipe(this CookingTable table, List<ItemInstance> items, bool leaveOneItem = false)
+        public static CookingTable_Recipe_UI FindRecipe(this CookingTable table, CachedItemCollection items, bool leaveOneItem = false)
         {
             CookingTable_Recipe_UI nearest = null;
             var min = float.MaxValue;
-            foreach (var recipe in BenevolentSprites.recipes)
+            foreach (var recipe in recipes)
                 if (recipe && recipe.Recipe && recipe.Recipe.RecipeType == table.cookingType)
                 {
-                    var dist = (recipe.transform.position - table.transform.position).magnitude;
-                    if (dist < min && recipe.Recipe.RecipeCost.CanCraftFrom(items,leaveOneItem))
+                    var dist = (recipe.transform.localPosition - table.transform.localPosition).sqrMagnitude;
+                    if (dist < min && items.HasEnough(recipe.Recipe.RecipeCost, leaveOneItem))
                     {
                         min = dist;
                         nearest = recipe;
                     }
                 }
-            if (min > 2)
+            if (min > 4)
                 return null;
             return nearest;
-        }
-
-        public static bool CanCraftFrom(this CostMultiple[] costs, List<ItemInstance> items, bool leaveOneItem = false)
-        {
-            foreach (CostMultiple cost in costs)
-                if (items.GetCount(cost,leaveOneItem) < cost.amount)
-                    return false;
-            return true;
         }
 
         public static List<ItemInstance> TakeItems(this Inventory inventory, CostMultiple[] costs)
@@ -1086,7 +1112,7 @@ namespace BenevolentSprites
             }
             return items;
         }
-        public static List<ItemInstance> TakeItems(this Inventory inventory, Item_Base item, int count, bool leaveOneItem = false)
+        public static List<ItemInstance> TakeItems(this Inventory inventory, Item_Base item, int count, bool leaveOneItem = false)  
         {
             var items = new List<ItemInstance>();
             foreach (var slot in inventory.allSlots)
@@ -1179,14 +1205,14 @@ namespace BenevolentSprites
                     {
                         if (!leaveOneItem && count % item.MaxUses <= slot.itemInstance.Uses)
                         {
-                            var c = Mathf.CeilToInt((float)count / item.MaxUses);
+                            var c = (int)Math.Ceiling((double)count / item.MaxUses);
                             slot.itemInstance.Amount -= c;
                             items.Add(new ItemInstance(item, c, slot.itemInstance.Uses));
                             slot.itemInstance.Uses = item.MaxUses;
                         }
                         else
                         {
-                            var c = Mathf.CeilToInt((float)count / item.MaxUses);
+                            var c = (int)Math.Ceiling((double)count / item.MaxUses);
                             slot.itemInstance.Amount -= c;
                             items.Add(new ItemInstance(item, c, item.MaxUses));
                         }
@@ -1251,7 +1277,7 @@ namespace BenevolentSprites
             if (pickup.itemInstance != null && pickup.itemInstance.Valid)
                 items.Add(pickup.itemInstance);
             if (pickup.specificPickups != null)
-                BenevolentSprites.UsingFakeInventory(tempInv =>
+                UsingFakeInventory(tempInv =>
                 {
                     foreach (var specificPickup in pickup.specificPickups)
                     {
@@ -1331,14 +1357,18 @@ namespace BenevolentSprites
                 PickupObjectManager.RemovePickupItem(pickup, new CSteamID(0));
             }
         }
+
         public static Item_Base FindItem(this Inventory inventory, Block_CookingStand stand, out List<CookingSlot> slots, bool leaveOneItem = false)
         {
             slots = null;
             var leave = new HashSet<Item_Base>();
+            var check = new HashSet<int>();
             foreach (var s in inventory.allSlots)
                 if (s.HasValidItemInstance())
                 {
                     if (leaveOneItem && leave.Add(s.itemInstance.baseItem) && s.itemInstance.Amount == 1)
+                        continue;
+                    if (!check.Add(s.itemInstance.UniqueIndex))
                         continue;
                     slots = stand.GetCookingSlotsForItem(s.itemInstance.baseItem)?.ToList();
                     if (slots != null)
@@ -1350,14 +1380,14 @@ namespace BenevolentSprites
         public static bool IsRepelled(this Transform t)
         {
             foreach (var g in SpriteRepellent.repellents)
-                if ((t.position - g.transform.position).sqrMagnitude < BenevolentSprites.RepelRange)
+                if ((t.position - g.transform.position).sqrMagnitude < RepelRange)
                     return true;
             return false;
         }
         public static bool IsRepelled(this Transform t, Vector3 off)
         {
             foreach (var g in SpriteRepellent.repellents)
-                if ((t.TransformPoint(off) - g.transform.position).sqrMagnitude < BenevolentSprites.RepelRange)
+                if ((t.TransformPoint(off) - g.transform.position).sqrMagnitude < RepelRange)
                     return true;
             return false;
         }
@@ -1526,6 +1556,208 @@ namespace BenevolentSprites
             }
             return c == d;
         }
+
+        public static string instStr(this Object obj) => obj + ": " + obj?.GetInstanceID();
+    }
+
+    public class CachedItemCollection
+    {
+        Storage_Small box;
+        Dictionary<int, int> counts = new Dictionary<int, int>();
+        public CachedItemCollection(Storage_Small storage)
+        {
+            box = storage;
+        }
+        public void Forget(int index) => counts.Remove(index);
+        bool PreventClear = false;
+        public void Clear()
+        {
+            if (!PreventClear)
+                counts.Clear();
+        }
+        public void CloseWithoutClear()
+        {
+            PreventClear = true;
+            try
+            {
+                box.Close();
+            }
+            finally
+            {
+                PreventClear = false;
+            }
+        }
+        public int GetItemCount(string name) => GetItemCount(LookupItem(name).UniqueIndex);
+        public int GetItemCount(int index)
+        {
+            if (counts.TryGetValue(index, out var result) && result != -1)
+                return result;
+            result = 0;
+            var inter = box.GetInventoryReference().allSlots.GetInternal();
+            var len = box.GetInventoryReference().allSlots.Count;
+            if (len != 0)
+                foreach (var i in inter)
+                {
+                    if (i.HasValidItemInstance() && i.itemInstance.UniqueIndex == index)
+                        result += i.itemInstance.Amount;
+                    len--;
+                    if (len == 0)
+                        break;
+                }
+            return counts[index] = result;
+        }
+        public int[] GetItemCounts(params int[] index)
+        {
+            var result = new int[index.Length];
+            var found = new bool[index.Length];
+            var flag = true;
+            unsafe
+            {
+                fixed (int* ia = index)
+                fixed (int* ra = result)
+                fixed (bool* fa = found)
+                {
+                    var e = ia + index.Length;
+                    var pp = ia;
+                    var rp = ra;
+                    var fp = fa;
+                    while (pp < e)
+                    {
+                        if (!counts.TryGetValue(*pp, out *rp) || *rp == -1)
+                        {
+                            *rp = 0;
+                            flag = false;
+                        }
+                        else
+                            *fp = true;
+                        pp++;
+                        rp++;
+                        fp++;
+                    }
+                }
+            }
+            if (flag)
+                return result;
+            var inter = box.GetInventoryReference().allSlots.GetInternal();
+            var len = box.GetInventoryReference().allSlots.Count;
+            if (len != 0)
+                foreach (var i in inter)
+                {
+                    if (i.HasValidItemInstance())
+                    {
+                        var ind = FastIndexOf(index, i.itemInstance.UniqueIndex);
+                        if (ind == -1)
+                            continue;
+                        if (!found[ind])
+                            result[ind] += i.itemInstance.Amount;
+                    }
+                    len--;
+                    if (len == 0)
+                        break;
+                }
+            for (int i = 0; i < found.Length; i++)
+                if (!found[i])
+                    counts[index[i]] = result[i];
+            return result;
+        }
+        public bool HasItem(string name) => HasItem(LookupItem(name).UniqueIndex);
+        public bool HasItem(int index)
+        {
+            if (counts.TryGetValue(index, out var result))
+                return result != 0;
+            var inter = box.GetInventoryReference().allSlots.GetInternal();
+            var len = box.GetInventoryReference().allSlots.Count;
+            if (len != 0)
+                foreach (var i in inter)
+                {
+                    if (i.HasValidItemInstance() && i.itemInstance.UniqueIndex == index)
+                    {
+                        counts[index] = -1;
+                        return true;
+                    }
+                    len--;
+                    if (len == 0)
+                        break;
+                }
+            counts[index] = 0;
+            return false;
+        }
+
+        public int GetCount(CostMultiple cost, bool leaveOne)
+        {
+            var ints = new int[cost.items.Length];
+            for (int i = 0; i < ints.Length; i++)
+                ints[i] = cost.items[i].UniqueIndex;
+            ints = GetItemCounts(ints);
+            var result = 0;
+            foreach (var i in ints)
+                if (leaveOne && i != 0)
+                    result += i - 1;
+                else
+                    result += i;
+            return result;
+        }
+
+        public bool HasEnough(CostMultiple[] costs, bool leaveOne)
+        {
+            var len = 0;
+            foreach (var c in costs)
+                len += c.items.Length;
+            var ints = new int[len];
+            unsafe
+            {
+                fixed (int* a = ints)
+                {
+                    var pos = a;
+                    foreach (var c in costs)
+                        foreach (var i in c.items)
+                        {
+                           *pos = i.UniqueIndex;
+                            pos++;
+                        }
+                }
+            }
+            ints = GetItemCounts(ints);
+            unsafe
+            {
+                fixed (int* a = ints)
+                {
+                    var pos = a;
+                    foreach (var c in costs)
+                    {
+                        var count = 0;
+                        var e = pos + c.items.Length;
+                        for (;pos < e;pos++)
+                        {
+                            var v = *pos;
+                            if (leaveOne && v != 0)
+                                count += v - 1;
+                            else
+                                count += v;
+                        }
+                        if (count < c.amount)
+                            return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        static unsafe int FastIndexOf(int[] array, int value)
+        {
+            fixed(int* a = array)
+            {
+                var e = array.Length;
+                var p = a;
+                for (var i = 0; i < e; i++)
+                {
+                    if (*p == value)
+                        return i;
+                    p++;
+                }
+            }
+            return -1;
+        }
     }
 
     public class SpriteRepellent : MonoBehaviour
@@ -1541,6 +1773,16 @@ namespace BenevolentSprites
 
     public class HelperSprite
     {
+        static ConditionalWeakTable<Storage_Small, CachedItemCollection> table = new ConditionalWeakTable<Storage_Small, CachedItemCollection>();
+        public static CachedItemCollection GetStorageItems(Storage_Small box)
+        {
+            if (table.TryGetValue(box, out var cache))
+                return cache;
+            table.Add(box, cache = new CachedItemCollection(box));
+            return cache;
+        }
+        public CachedItemCollection GetStorageItems() => GetStorageItems(box);
+
         internal GameObject gameObject;
         internal Slot store;
         internal Item_Base item;
@@ -1556,17 +1798,16 @@ namespace BenevolentSprites
         internal bool dying;
         public uint ObjectIndex { private set; get; }
         internal Storage_Small box => store.GetStorage();
-        public virtual float MaxDistance => box.GetInventoryReference().GetSlotCount() * BenevolentSprites.SpriteRange;
+        public virtual float MaxDistance => box.GetInventoryReference().GetSlotCount() * SpriteRange;
         public bool IsDead => gameObject == null;
         public Vector3 Target => targetObject == null ? targetPosition : gameObject.transform.parent.InverseTransformPoint(targetObject.TransformPoint(targetPosition));
         public Vector3 TargetGlobal => gameObject.transform.parent.TransformPoint(Target);
-        public float DistanceFromTarget => (Target - gameObject.transform.localPosition).magnitude;
         public float SqrDistanceFromTarget => (Target - gameObject.transform.localPosition).sqrMagnitude;
         public const float interactDistance = 0.2f;
         public const float sqrInteractDistance = interactDistance * interactDistance;
         public HelperSprite(Storage_Small container, Slot slot, Color color, uint objectIndex = 0)
         {
-            gameObject = Object.Instantiate(BenevolentSprites.FirePrefab, GameManager.Singleton.lockedPivot, false);
+            gameObject = Object.Instantiate(FirePrefab, GameManager.Singleton.lockedPivot, false);
             if (!RAPI.IsDedicatedServer())
             {
                 var renderer = gameObject.GetComponent<SpriteRenderer>();
@@ -1621,7 +1862,7 @@ namespace BenevolentSprites
             Vector3 dir = Target + randomAccel - gameObject.transform.localPosition;
             if (!dying)
                 velocity += dir.normalized * acceleration * t;
-            velocity *= Mathf.Pow(0.3f, t);
+            velocity *= (float)Math.Pow(0.3, t);
             velocity.Clamp(0, maxVelocity);
             gameObject.transform.localPosition += velocity * t;
             AI();
@@ -1649,7 +1890,7 @@ namespace BenevolentSprites
                 while (timePassed < 0.75)
                 {
                     timePassed += Time.deltaTime / 2;
-                    float strength = Mathf.Max(Mathf.Sin(timePassed * Mathf.PI) * 3, 0);
+                    float strength = Math.Max((float)Math.Sin(timePassed * Math.PI) * 3, 0);
                     light.intensity = strength;
                     light.range = strength * 2;
                     yield return new WaitForEndOfFrame();
@@ -1669,8 +1910,13 @@ namespace BenevolentSprites
             {
                 MonoBehaviour_ID target = null;
                 Vector3 targetOffset = Vector3.zero;
-                if (holding.Count == 0 && targetObject == box.transform)
+                //GetSystemTimeAsFileTime(out var start);
+                if (holding.Count == 0 && targetObject == box.transform && !box.transform.IsRepelled())
                     pickTarget(out target, out targetOffset);
+                //GetSystemTimeAsFileTime(out var end);
+                //var span = (end - start) / 10000.0;
+                //if (span > 10)
+                //    Debug.Log($"Took too long. {this}: {sprites.IndexOf(this)} took {span} ms to pick a target");
                 if (target == null)
                 {
                     target = box;
@@ -1689,21 +1935,26 @@ namespace BenevolentSprites
             if (targetObject == box.transform && !box.IsOpen && SqrDistanceFromTarget <= sqrInteractDistance)
             {
                 bool added = false;
-                Patch_PlayMoveItemSound.disable = !BenevolentSprites.PlaySounds;
+                Patch_PlayMoveItemSound.disable = !PlaySounds;
+                var storage = GetStorageItems();
                 for (int i = holding.Count - 1; i >= 0; i--)
                 {
-                    int pre = holding[i].Amount;
-                    box.GetInventoryReference().AddItem(holding[i], false);
-                    if (pre != holding[i].Amount)
+                    var item = holding[i];
+                    int pre = item.Amount;
+                    box.GetInventoryReference().AddItem(item, false);
+                    if (pre != item.Amount)
+                    {
                         added = true;
-                    if (holding[i].Amount == 0)
+                        storage.Forget(item.UniqueIndex);
+                    }
+                    if (item.Amount == 0)
                         holding.RemoveAt(i);
                 }
                 Patch_PlayMoveItemSound.disable = false;
                 if (added)
                 {
-                    box.Close();
-                    if (BenevolentSprites.PlaySounds)
+                    storage.CloseWithoutClear();
+                    if (PlaySounds)
                     {
                         var eventRef = ComponentManager<SoundManager>.Value.MoveItemEventRef();
                         var msg = new Message_SoundManager_PlayOneShot(Messages.SoundManager_PlayOneShot, ComponentManager<Raft_Network>.Value.NetworkIDManager, ComponentManager<SoundManager>.Value.ObjectIndex, eventRef, box.transform.position);
@@ -1736,7 +1987,7 @@ namespace BenevolentSprites
     {
         static Dictionary<GardenSprite, PlantationSlot> targeted = new Dictionary<GardenSprite, PlantationSlot>();
         static Dictionary<int, List<Item_Base>> plantLootCache = new Dictionary<int, List<Item_Base>>();
-        public override float MaxDistance => base.MaxDistance * BenevolentSprites.GardenRange;
+        public override float MaxDistance => base.MaxDistance * GardenRange;
         public GardenSprite(Storage_Small container, Slot slot, uint objectIndex = 0) : base(container, slot, new Color(Random.Range(0, 0.125f), Random.Range(0.875f, 1), 0), objectIndex)
         {
             targeted.Add(this, null);
@@ -1780,12 +2031,11 @@ namespace BenevolentSprites
         }
         internal override void pickTarget(out MonoBehaviour_ID target, out Vector3 targetOffset)
         {
-            float dist = float.MaxValue;
+            float dist = MaxDistance * MaxDistance;
             target = null;
             targetOffset = Vector3.zero;
-            if (box.transform.IsRepelled())
-                return;
             targeted[this] = null;
+            var storage = GetStorageItems();
             foreach (var cropplot in PlantManager.allCropplots)
             {
                 if (cropplot is Cropplot_Grass)
@@ -1795,7 +2045,7 @@ namespace BenevolentSprites
                     if (targeted.ContainsValue(plantation) || plantation.transform.IsRepelled())
                         continue;
                     var newDist = (box.transform.position - plantation.transform.position).sqrMagnitude;
-                    if (plantation.plant && plantation.plant.FullyGrown() && newDist < dist && ExclusiveCollect(plantation.plant))
+                    if (plantation.plant && plantation.plant.FullyGrown() && newDist < dist && ExclusiveCollect(plantation.plant, storage))
                     {
                         target = cropplot;
                         targetOffset = plantation.plant.transform.localPosition + Vector3.up * 0.2f;
@@ -1806,16 +2056,12 @@ namespace BenevolentSprites
             }
             if (target)
             {
-                if (Mathf.Sqrt(dist) > MaxDistance)
+                var item = targeted[this].plant.item;
+                if (!box.IsOpen && storage.GetItemCount(item.UniqueIndex) > (KeepItem > 0 ? 1 : 0))
                 {
-                    target = null;
-                    targetOffset = Vector3.zero;
-                    targeted[this] = null;
-                }
-                else if (!box.IsOpen && box.GetInventoryReference().GetItemCount(targeted[this].plant.item) > (BenevolentSprites.KeepItem > 0 ? 1 : 0))
-                {
-                    holding.AddRange(box.GetInventoryReference().TakeItems(targeted[this].plant.item, 1));
-                    box.Close();
+                    storage.Forget(item.UniqueIndex);
+                    holding.AddRange(box.GetInventoryReference().TakeItems(item, 1));
+                    storage.CloseWithoutClear();
                 }
             }
             else
@@ -1829,9 +2075,9 @@ namespace BenevolentSprites
             msg.Message.Broadcast();
         }
 
-        bool ExclusiveCollect(Plant plant)
+        bool ExclusiveCollect(Plant plant, CachedItemCollection items)
         {
-            if (!BenevolentSprites.EC_Garden)
+            if (!EC_Garden)
                 return true;
             List<Item_Base> loot;
             if (plantLootCache.ContainsKey(plant.item.UniqueIndex))
@@ -1839,14 +2085,13 @@ namespace BenevolentSprites
             else
             {
                 loot = plant.pickupComponent.GetAllPossible();
+                loot.RemoveAll(x => x.UniqueName == "Plank" || x.UniqueName == "Thatch");
                 loot.AddUniqueOnly(plant.item);
                 plantLootCache.Add(plant.item.UniqueIndex, loot);
             }
-            foreach (var slot in box.GetInventoryReference().allSlots)
-                if (slot.HasValidItemInstance() && slot.itemInstance.UniqueName != "Plank" && slot.itemInstance.UniqueName != "Thatch")
-                    foreach (var item in loot)
-                        if (slot.itemInstance.UniqueIndex == item.UniqueIndex)
-                            return true;
+            foreach (var item in loot)
+                if (items.HasItem(item.UniqueIndex))
+                    return true;
             return false;
         }
 
@@ -1876,7 +2121,7 @@ namespace BenevolentSprites
     class AnimalSprite : HelperSprite
     {
         static Dictionary<AnimalSprite, MonoBehaviour_ID> targeted = new Dictionary<AnimalSprite, MonoBehaviour_ID>();
-        public override float MaxDistance => base.MaxDistance * BenevolentSprites.AnimalRange;
+        public override float MaxDistance => base.MaxDistance * AnimalRange;
         public AnimalSprite(Storage_Small container, Slot slot, uint objectIndex = 0) : base(container, slot, new Color(Random.Range(0.125f, 0.25f), 0, Random.Range(0.875f, 1)), objectIndex)
         {
             targeted.Add(this, null);
@@ -1891,13 +2136,11 @@ namespace BenevolentSprites
         {
             target = null;
             targetOffset = Vector3.zero;
-            if (box.transform.IsRepelled())
-                return;
-            float dist = float.MaxValue;
+            float dist = MaxDistance * MaxDistance;
             targeted[this] = null;
             Item_Base requiredItem = null;
-            var itemCount = new Dictionary<Item_Base, int>();
-            foreach (var animal in BenevolentSprites.animals)
+            var storage = GetStorageItems();
+            foreach (var animal in animals)
             {
                 if (animal == null || animal.DomesticState != DomesticStateType.Raft || targeted.ContainsValue(animal) || animal.transform.IsRepelled())
                     continue;
@@ -1905,8 +2148,7 @@ namespace BenevolentSprites
                 if (!animal.Resource || !animal.Resource.IsReady || newDist >= dist)
                     continue;
                 var collectionItem = animal.Resource.resource.collectionItem;
-                itemCount.TryAdd(collectionItem, box.GetInventoryReference().GetItemCount(collectionItem));
-                if ((collectionItem.MaxUses != 1 || (!box.IsOpen && itemCount[collectionItem] > (BenevolentSprites.KeepItem > 1 ? 1 : 0))) && ExclusiveCollect(animal))
+                if ((collectionItem.MaxUses != 1 || (!box.IsOpen && (KeepItem > 1 ? storage.GetItemCount(collectionItem.UniqueIndex) > 1 : storage.HasItem(collectionItem.UniqueIndex)))) && ExclusiveCollect(animal, storage))
                 {
                     if (collectionItem.MaxUses == 1)
                         requiredItem = collectionItem;
@@ -1918,12 +2160,12 @@ namespace BenevolentSprites
                     targeted[this] = animal;
                 }
             }
-            foreach (var item in BenevolentSprites.eggs)
+            foreach (var item in eggs)
             {
                 if (item == null || targeted.ContainsValue(item) || item.transform.IsRepelled())
                     continue;
                 var newDist = (box.transform.position - item.transform.position).sqrMagnitude;
-                if (newDist < dist && ExclusiveCollect(item))
+                if (newDist < dist && ExclusiveCollect(item, storage))
                 {
                     requiredItem = null;
                     target = item;
@@ -1932,12 +2174,12 @@ namespace BenevolentSprites
                     targeted[this] = item;
                 }
             }
-            foreach (var hive in BenevolentSprites.beehives)
+            foreach (var hive in beehives)
             {
                 if (hive == null || targeted.ContainsValue(hive) || hive.transform.IsRepelled())
                     continue;
                 var newDist = (box.transform.position - hive.transform.position).sqrMagnitude;
-                if (hive.currentHoneyLevelIndex != -1 && newDist < dist && ExclusiveCollect(hive))
+                if (hive.currentHoneyLevelIndex != -1 && newDist < dist && ExclusiveCollect(hive, storage))
                 {
                     requiredItem = null;
                     target = hive;
@@ -1954,7 +2196,7 @@ namespace BenevolentSprites
                     var newDist = (box.transform.position - nest.transform.position).sqrMagnitude;
                     if ((nest.HasFeather || nest.HasEgg) && newDist < dist)
                     {
-                        var v = ExclusiveCollect(nest);
+                        var v = ExclusiveCollect(nest, storage);
                         if (!v.Item1 && !v.Item2)
                             continue;
                         requiredItem = null;
@@ -1964,19 +2206,11 @@ namespace BenevolentSprites
                         targeted[this] = nest;
                     }
                 }
-            if (target)
+            if (target && requiredItem)
             {
-                if (Mathf.Sqrt(dist) > MaxDistance)
-                {
-                    target = null;
-                    targetOffset = Vector3.zero;
-                    targeted[this] = null;
-                }
-                else if (requiredItem)
-                {
-                    holding.AddRange(box.GetInventoryReference().TakeItemUses(requiredItem, 1));
-                    box.Close();
-                }
+                storage.Forget(requiredItem.UniqueIndex);
+                holding.AddRange(box.GetInventoryReference().TakeItemUses(requiredItem, 1));
+                storage.CloseWithoutClear();
             }
         }
         internal override bool tryInteract()
@@ -2024,7 +2258,7 @@ namespace BenevolentSprites
             }
             else if (nest)
             {
-                var b = ExclusiveCollect(nest);
+                var b = ExclusiveCollect(nest, GetStorageItems());
                 if (nest.HasEgg && b.Item1)
                 {
                     var item = nest.EggItem();
@@ -2049,50 +2283,35 @@ namespace BenevolentSprites
             return true;
         }
 
-        bool ExclusiveCollect(AI_NetworkBehaviour_Domestic_Resource animal)
+        bool ExclusiveCollect(AI_NetworkBehaviour_Domestic_Resource animal, CachedItemCollection storage) => !EC_Animal || storage.HasItem(animal.Resource.resource.resource.UniqueIndex);
+
+        bool ExclusiveCollect(PickupItem_Networked pickup, CachedItemCollection storage)
         {
-            if (!BenevolentSprites.EC_Animal)
+            if (!EC_Animal)
                 return true;
-            var item = animal.Resource.resource.resource.UniqueIndex;
-            foreach (var slot in box.GetInventoryReference().allSlots)
-                if (slot.HasValidItemInstance() && slot.itemInstance.UniqueIndex == item)
+            foreach (var item in pickup.PickupItem.GetAllPossible())
+                if (storage.HasItem(item.UniqueIndex))
                     return true;
             return false;
         }
 
-        bool ExclusiveCollect(PickupItem_Networked pickup)
+        bool ExclusiveCollect(BeeHive hive, CachedItemCollection storage)
         {
-            if (!BenevolentSprites.EC_Animal)
+            if (!EC_Animal2)
                 return true;
-            List<Item_Base> loot = pickup.PickupItem.GetAllPossible();
-            foreach (var slot in box.GetInventoryReference().allSlots)
-                if (slot.HasValidItemInstance())
-                    foreach (var item in loot)
-                        if (slot.itemInstance.UniqueIndex == item.UniqueIndex)
-                            return true;
+            foreach (var item in hive.CurrentHoneyLevel.yield.GetAllPossible())
+                if (storage.HasItem(item.UniqueIndex))
+                    return true;
             return false;
         }
 
-        bool ExclusiveCollect(BeeHive hive)
+        (bool,bool) ExclusiveCollect(BirdsNest nest, CachedItemCollection storage)
         {
-            if (!BenevolentSprites.EC_Animal2)
-                return true;
-            List<Item_Base> loot = hive.CurrentHoneyLevel.yield.GetAllPossible();
-            foreach (var slot in box.GetInventoryReference().allSlots)
-                if (slot.HasValidItemInstance())
-                    foreach (var item in loot)
-                        if (slot.itemInstance.UniqueIndex == item.UniqueIndex)
-                            return true;
-            return false;
-        }
-
-        (bool,bool) ExclusiveCollect(BirdsNest nest)
-        {
-            if (!BenevolentSprites.EC_Animal3)
+            if (!EC_Animal3)
                 return (true,true);
             return (
-                nest.HasEgg && box.GetInventoryReference().GetItemCount(nest.EggItem()) > 0,
-                nest.HasFeather && box.GetInventoryReference().GetItemCount(nest.FeatherItem()) > 0
+                nest.HasEgg && storage.HasItem(nest.EggItem().UniqueIndex),
+                nest.HasFeather && storage.HasItem(nest.FeatherItem().UniqueIndex)
                 );
         }
 
@@ -2104,13 +2323,13 @@ namespace BenevolentSprites
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
         {
-            foreach (var animal in BenevolentSprites.animals)
+            foreach (var animal in animals)
                 if (animal.ObjectIndex == objectIndex)
                     return animal;
-            foreach (var item in BenevolentSprites.eggs)
+            foreach (var item in eggs)
                 if (item.ObjectIndex == objectIndex)
                     return item;
-            foreach (var hive in BenevolentSprites.beehives)
+            foreach (var hive in beehives)
                 if (hive.ObjectIndex == objectIndex)
                     return hive;
             foreach (var nest in BirdsNest.AllNests)
@@ -2123,7 +2342,7 @@ namespace BenevolentSprites
     class FireSprite : HelperSprite
     {
         static Dictionary<FireSprite, CookingSlotTargets> targeted = new Dictionary<FireSprite, CookingSlotTargets>();
-        public override float MaxDistance => base.MaxDistance * BenevolentSprites.FireRange;
+        public override float MaxDistance => base.MaxDistance * FireRange;
         public FireSprite(Storage_Small container, Slot slot, uint objectIndex = 0) : base(container, slot, new Color(Random.Range(0.875f, 1), Random.Range(0, 0.125f), 0), objectIndex)
         {
             targeted.Add(this, CookingSlotTargets.Null);
@@ -2140,30 +2359,29 @@ namespace BenevolentSprites
         {
             target = null;
             targetOffset = Vector3.zero;
-            if (box.transform.IsRepelled())
-                return;
-            float dist = float.MaxValue;
+            var maxDist = MaxDistance * MaxDistance;
+            float dist = maxDist;
             targeted[this] = CookingSlotTargets.Null;
             Item_Base cookItem = null;
             Cost fuel = null;
             var fueling = true;
-            var maxDist = MaxDistance;
             var newTarget = CookingSlotTargets.Null;
-            foreach (var stand in BenevolentSprites.stands)
+            var storage = GetStorageItems();
+            foreach (var stand in stands)
             {
-                if (stand == null || stand is Block_CookingStand_Purifier)
+                if (!stand || stand is Block_CookingStand_Purifier || (box.transform.position - stand.transform.position).sqrMagnitude > maxDist * 1.2 || stand.transform.IsRepelled())
                     continue;
                 var f = 0;
-                if (!box.IsOpen && stand.fuel != null)
-                    f = Mathf.Max(Mathf.Min(stand.fuel.Missing() - InboundFuel(stand), box.GetInventoryReference().GetItemCount(stand.fuel.fuelItem) - (BenevolentSprites.KeepItem > 1 ? 1 : 0)), 0);
+                if (!box.IsOpen && stand.fuel)
+                    f = Math.Max(Math.Min(stand.fuel.Missing() - InboundFuel(stand), storage.GetItemCount(stand.fuel.fuelItem.UniqueIndex) - (KeepItem > 1 ? 1 : 0)), 0);
                 foreach (var slot in stand.cookingSlots)
                 {
                     var flagEmpty = !slot.IsBusy && !box.IsOpen;
                     var flagComplete = slot.IsComplete;
                     if ((!flagComplete && !flagEmpty && f == 0) || slot.transform.IsRepelled())
                         continue;
-                    var newDist = Vector3.Distance(box.transform.position, slot.transform.position);
-                    if ((newDist >= dist && !fueling) || newDist > maxDist)
+                    var newDist = (box.transform.position - slot.transform.position).sqrMagnitude;
+                    if (newDist >= (fueling ? maxDist : dist))
                         continue;
                     Item_Base item = null;
                     List<CookingSlot> fetched = null;
@@ -2174,7 +2392,7 @@ namespace BenevolentSprites
                         Patch_GetCookingSlots.spriteCall = true;
                         try
                         {
-                            item = box.GetInventoryReference().FindItem(stand, out fetched, BenevolentSprites.KeepItem > 0);
+                            item = box.GetInventoryReference().FindItem(stand, out fetched, KeepItem > 0);
                         }
                         catch (Exception e)
                         {
@@ -2189,7 +2407,7 @@ namespace BenevolentSprites
                         }
                     }
                     else if (flagComplete)
-                        flagComplete = ExclusiveCollect(slot);
+                        flagComplete = ExclusiveCollect(slot, storage) && !targeted.ContainsValue(slot);
                     if (flagComplete || item || (f != 0 && fueling))
                     {
                         if (stand.fuel != null)
@@ -2230,24 +2448,21 @@ namespace BenevolentSprites
             }
             if (target)
             {
-                if (dist > maxDist)
-                {
-                    target = null;
-                    targetOffset = Vector3.zero;
-                    return;
-                }
                 targeted[this] = newTarget;
                 if (cookItem)
                 {
+                    storage.Forget(cookItem.UniqueIndex);
                     holding.AddRange(box.GetInventoryReference().TakeItemUses(cookItem, 1));
-                    box.Close();
+                    storage.CloseWithoutClear();
                 }
                 if (fuel != null && fuel.amount != 0)
                 {
+                    storage.Forget(fuel.item.UniqueIndex);
                     holding.AddRange(box.GetInventoryReference().TakeItems(fuel.item, fuel.amount));
-                    box.Close();
+                    storage.CloseWithoutClear();
                 }
 
+                //Debug.Log($"Sprite {sprites.IndexOf(this)} has targeted {newTarget.stand.instStr()} [{newTarget.slotInds.Join()}]. Mode: {(cookItem ? "Start Cooking " + cookItem.settings_Inventory.DisplayName : fuel != null && fuel.amount != 0 ? "Add fuel" : "Pickup item")}");
             }
         }
         internal override bool tryInteract()
@@ -2264,6 +2479,7 @@ namespace BenevolentSprites
             foreach (var slot in target.Slots)
                 if (!slot.IsComplete && slot.IsBusy && !(target.stand.fuel && holding.Contains(target.stand.fuel.fuelItem) && !target.stand.fuel.HasMaxFuel()))
                 {
+                    //Debug.Log($"Sprite {sprites.IndexOf(this)} target lost");
                     targeted[this] = CookingSlotTargets.Null;
                     return true;
                 }
@@ -2271,11 +2487,11 @@ namespace BenevolentSprites
                 return false;
             if (target.stand.fuel != null && holding.Contains(target.stand.fuel.fuelItem) && !target.stand.fuel.HasMaxFuel())
             {
-                var m = Mathf.Min(target.stand.fuel.Missing(), holding.GetCount(target.stand.fuel.fuelItem));
+                var m = Math.Min(target.stand.fuel.Missing(), holding.GetCount(target.stand.fuel.fuelItem));
                 AddFuel(target.stand, m);
                 holding.Remove(target.stand.fuel.fuelItem, m, true);
             }
-            if (target.Slot.IsComplete && ExclusiveCollect(target.Slot))
+            if (target.Slot.IsComplete && ExclusiveCollect(target.Slot, GetStorageItems()))
             {
                 holding.Add(target.Slot.CurrentItem.settings_cookable.CookingResult);
                 ClearItem(target.stand, target.Slot);
@@ -2308,7 +2524,7 @@ namespace BenevolentSprites
             return true;
         }
 
-        bool ExclusiveCollect(CookingSlot slot) => !BenevolentSprites.EC_Fire || box.GetInventoryReference().GetItemCount(slot.CurrentItem) != 0 || box.GetInventoryReference().GetItemCount(slot.CurrentItem.settings_cookable.CookingResult.item) != 0;
+        bool ExclusiveCollect(CookingSlot slot, CachedItemCollection storage) => !EC_Fire || storage.HasItem(slot.CurrentItem.UniqueIndex) || storage.HasItem(slot.CurrentItem.settings_cookable.CookingResult.item.UniqueIndex);
 
         static void ClearItem(Block_CookingStand stand, CookingSlot slot)
         {
@@ -2345,7 +2561,7 @@ namespace BenevolentSprites
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
         {
-            foreach (var stand in BenevolentSprites.stands)
+            foreach (var stand in stands)
                 if (stand.ObjectIndex == objectIndex)
                     return stand;
             return base.FindTarget(objectIndex);
@@ -2356,7 +2572,7 @@ namespace BenevolentSprites
     {
         static Dictionary<FireSprite2, CookingTable> targeted = new Dictionary<FireSprite2, CookingTable>();
         SO_CookingTable_Recipe Recipe = null;
-        public override float MaxDistance => base.MaxDistance * BenevolentSprites.Fire2Range;
+        public override float MaxDistance => base.MaxDistance * Fire2Range;
         public FireSprite2(Storage_Small container, Slot slot, uint objectIndex = 0) : base(container, slot, new Color(Random.Range(0.5f, 0.625f), Random.Range(0, 0.125f), 0), objectIndex)
         {
             targeted.Add(this, null);
@@ -2371,56 +2587,53 @@ namespace BenevolentSprites
         {
             target = null;
             targetOffset = Vector3.zero;
-            if (box.transform.IsRepelled())
-                return;
-            float dist = float.MaxValue;
+            var maxDist = MaxDistance * MaxDistance;
+            var dist = maxDist;
             targeted[this] = null;
             Cost requiredItem = null;
             CookingTable_Recipe_UI recipe = null;
             Cost fuel = null;
             var fueling = true;
-            var itemCount = new Dictionary<Item_Base, int>();
-            var maxDist = MaxDistance;
-            var recipeCache = new Dictionary<SO_CookingTable_Recipe, bool>();
+            var itemCount = GetStorageItems();
             if (!box.IsOpen)
-                foreach (var table in BenevolentSprites.tables)
+                foreach (var table in tables)
                 {
+                    //GetSystemTimeAsFileTime(out var start);
                     if (table == null || targeted.ContainsValue(table) || table.transform.IsRepelled())
                         continue;
-                    var newDist = Vector3.Distance(box.transform.position, table.transform.position);
-                    if ((newDist >= dist && !fueling) || newDist > maxDist)
+                    var newDist = (box.transform.position - table.transform.position).sqrMagnitude;
+                    if (newDist >= (fueling ? maxDist : dist))
                         continue;
                     var collectionItem = table.PickupFoodItem();
+                    //GetSystemTimeAsFileTime(out var end);
+                    //var span = end - start;
+                    //if (span > 100000)
+                    //    Debug.Log($"Took too long for init check {table.instStr()}. Took {span / 10000.0} ms");
+                    //GetSystemTimeAsFileTime(out start);
                     CookingTable_Recipe_UI cooked = null;
                     if (table.CurrentRecipe == null)
-                        cooked = table.FindRecipe(box.GetInventoryReference().GetAllItems(), BenevolentSprites.KeepItem > 0);
-                    itemCount.TryAdd(collectionItem, box.GetInventoryReference().GetItemCount(collectionItem));
-                    var collecting = table.Portions != 0 && itemCount[collectionItem] > (BenevolentSprites.KeepItem > 1 ? 1 : 0);
-                    if (collecting && BenevolentSprites.EC_Fire2)
-                    {
-                        if (recipeCache.ContainsKey(table.CurrentRecipe))
-                            collecting = recipeCache[table.CurrentRecipe];
-                        else
-                        {
-                            var result = table.CurrentRecipe.Result.UniqueIndex;
-                            foreach (var slot in box.GetInventoryReference().allSlots)
-                                if (slot.HasValidItemInstance())
-                                {
-                                    if (result == slot.itemInstance.UniqueIndex)
-                                        goto leaveCollectionCheck;
-                                    foreach (var cost in table.CurrentRecipe.RecipeCost)
-                                        if (cost.ContainsItem(slot.itemInstance.baseItem))
-                                            goto leaveCollectionCheck;
-                                }
-                            collecting = false;
-                        leaveCollectionCheck:
-                            recipeCache.Add(table.CurrentRecipe, collecting);
-                        }
-                    }
+                        cooked = table.FindRecipe(itemCount, KeepItem > 0);
+                    //GetSystemTimeAsFileTime(out end);
+                    //span = end - start;
+                    //if (span > 100000)
+                    //    Debug.Log($"Took too long to find recipe for {table.instStr()}. Took {span / 10000.0} ms");
+                    //GetSystemTimeAsFileTime(out start);
+                    var collecting = table.Portions != 0 && (KeepItem > 1 ? itemCount.GetItemCount(collectionItem.UniqueIndex) > 1 : itemCount.HasItem(collectionItem.UniqueIndex));
+                    if (collecting && EC_Fire2)
+                        collecting = itemCount.HasItem(table.CurrentRecipe.Result.UniqueIndex);
+                    //GetSystemTimeAsFileTime(out end);
+                    //span = end - start;
+                    //if (span > 100000)
+                    //    Debug.Log($"Took too long to check collection for {table.instStr()}. Took {span / 10000.0} ms");
+                    //GetSystemTimeAsFileTime(out start);
                     var f = 0;
                     var fC = table.GetComponentInChildren<FuelNetwork>();
                     if (fC)
-                        f = Mathf.Max(Mathf.Min(fC.Fuel.Missing(), box.GetInventoryReference().GetItemCount(fC.Fuel.fuelItem) - (BenevolentSprites.KeepItem > 1 ? 1 : 0)), 0);
+                        f = Math.Max(Math.Min(fC.Fuel.Missing(), itemCount.GetItemCount(fC.Fuel.fuelItem.UniqueIndex) - (KeepItem > 1 ? 1 : 0)), 0);
+                    //GetSystemTimeAsFileTime(out end);
+                    //span = end - start;
+                    //if (span > 100000)
+                    //    Debug.Log($"Took too long to check fuel for {table.instStr()}. Took {span / 10000.0} ms");
                     if (cooked || collecting || (f != 0 && fueling))
                     {
                         fueling = f != 0;
@@ -2437,7 +2650,7 @@ namespace BenevolentSprites
                         }
                         else if (collecting)
                         {
-                            requiredItem = new Cost(collectionItem, Mathf.Min((int)table.Portions, itemCount[collectionItem] - (BenevolentSprites.KeepItem > 1 ? 1 : 0)));
+                            requiredItem = new Cost(collectionItem, Math.Min((int)table.Portions, itemCount.GetItemCount(collectionItem.UniqueIndex) - (KeepItem > 1 ? 1 : 0)));
                             fueling = false;
                         }
                         target = table;
@@ -2449,30 +2662,26 @@ namespace BenevolentSprites
             Recipe = null;
             if (target)
             {
-                if (dist > maxDist)
+                if (requiredItem != null && requiredItem.amount > 0)
                 {
-                    target = null;
-                    targetOffset = Vector3.zero;
-                    targeted[this] = null;
+                    itemCount.Forget(requiredItem.item.UniqueIndex);
+                    holding.AddRange(box.GetInventoryReference().TakeItems(requiredItem.item, requiredItem.amount));
+                    itemCount.CloseWithoutClear();
                 }
-                else
+                else if (recipe)
                 {
-                    if (requiredItem != null && requiredItem.amount > 0)
-                    {
-                        holding.AddRange(box.GetInventoryReference().TakeItems(requiredItem.item, requiredItem.amount));
-                        box.Close();
-                    }
-                    else if (recipe)
-                    {
-                        Recipe = recipe.Recipe;
-                        holding.AddRange(box.GetInventoryReference().TakeItems(recipe.Recipe.RecipeCost));
-                        box.Close();
-                    }
-                    if (fuel != null && fuel.amount != 0)
-                    {
-                        holding.AddRange(box.GetInventoryReference().TakeItems(fuel.item, fuel.amount));
-                        box.Close();
-                    }
+                    Recipe = recipe.Recipe;
+                    foreach (var ca in recipe.Recipe.RecipeCost)
+                        foreach (var c in ca.items)
+                            itemCount.Forget(c.UniqueIndex);
+                    holding.AddRange(box.GetInventoryReference().TakeItems(recipe.Recipe.RecipeCost));
+                    itemCount.CloseWithoutClear();
+                }
+                if (fuel != null && fuel.amount != 0)
+                {
+                    itemCount.Forget(fuel.item.UniqueIndex);
+                    holding.AddRange(box.GetInventoryReference().TakeItems(fuel.item, fuel.amount));
+                    itemCount.CloseWithoutClear();
                 }
             }
         }
@@ -2495,7 +2704,7 @@ namespace BenevolentSprites
                 return false;
             if (f && holding.Contains(f.Fuel.fuelItem) && !f.Fuel.HasMaxFuel())
             {
-                var m = Mathf.Min(f.Fuel.Missing(), holding.GetCount(f.Fuel.fuelItem));
+                var m = Math.Min(f.Fuel.Missing(), holding.GetCount(f.Fuel.fuelItem));
                 AddFuel(target, m);
                 holding.Remove(f.Fuel.fuelItem, m, true);
             }
@@ -2514,7 +2723,7 @@ namespace BenevolentSprites
                 var amount = (int)target.Portions;
                 if (item)
                 {
-                    amount = Mathf.Min(holding.GetCount(item), amount);
+                    amount = Math.Min(holding.GetCount(item), amount);
                     holding.Remove(item, amount);
                 }
                 holding.Add(new Cost(target.CurrentRecipe.Result, amount));
@@ -2550,14 +2759,14 @@ namespace BenevolentSprites
         {
             if (targetObject)
                 targeted[this] = targetObject.GetComponent<CookingTable>();
-            Recipe = BenevolentSprites.GetRecipeFromIndex(int.Parse(data));
+            Recipe = GetRecipeFromIndex(int.Parse(data));
         }
 
         public override string GenerateData() => Recipe ? Recipe.RecipeIndex.ToString() : "-1";
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
         {
-            foreach (var table in BenevolentSprites.tables)
+            foreach (var table in tables)
                 if (table.ObjectIndex == objectIndex)
                     return table;
             return base.FindTarget(objectIndex);
@@ -2569,7 +2778,7 @@ namespace BenevolentSprites
         static Dictionary<CleanerSprite, MonoBehaviour_ID> targeted = new Dictionary<CleanerSprite, MonoBehaviour_ID>();
         public static Dictionary<Transform, MonoBehaviour> fishNetCache = new Dictionary<Transform, MonoBehaviour>();
         public static Dictionary<Transform, MonoBehaviour> dredgersCache = new Dictionary<Transform, MonoBehaviour>();
-        public override float MaxDistance => base.MaxDistance * BenevolentSprites.CleanerRange;
+        public override float MaxDistance => base.MaxDistance * CleanerRange;
         public CleanerSprite(Storage_Small container, Slot slot, uint objectIndex = 0) : base(container, slot, new Color(Random.Range(0.875f, 1), Random.Range(0.875f, 1), 0), objectIndex)
         {
             targeted.Add(this, null);
@@ -2584,33 +2793,13 @@ namespace BenevolentSprites
         {
             target = null;
             targetOffset = Vector3.zero;
-            if (box.transform.IsRepelled())
-                return;
-            float dist = float.MaxValue;
+            float dist = MaxDistance * MaxDistance;
             targeted[this] = null;
-            var maxDist = MaxDistance;
             var machineCache = new Dictionary<string, bool>();
             var machinesCache = new Dictionary<string, bool>();
-            bool HasMachine(string item)
-            {
-                if (machineCache.TryGetValue(item, out var state))
-                    return state;
-                return machineCache[item] = box.GetInventoryReference().GetItemCount(item) > 0;
-            }
-            bool HasMachines(string item)
-            {
-                if (machinesCache.TryGetValue(item, out var state))
-                    return state;
-                foreach (var i in machineCache)
-                    if (i.Key.StartsWith(item) && i.Value)
-                        return machinesCache[item] = true;
-                foreach (var i in ItemManager.GetAllItems())
-                    if (i.UniqueName.StartsWith(item) && HasMachine(i.UniqueName))
-                        return machinesCache[item] = true;
-                return machinesCache[item] = false;
-            }
-            if (BenevolentSprites.seagulls != null && (!BenevolentSprites.EC_Clean || HasMachine("Feather")))
-                foreach (var seagull in BenevolentSprites.seagulls)
+            var storage = GetStorageItems();
+            if (seagulls != null && (!EC_Clean || storage.HasItem("Feather")))
+                foreach (var seagull in seagulls)
                 {
                     if (seagull == null || targeted.ContainsValue(seagull))
                         continue;
@@ -2623,10 +2812,10 @@ namespace BenevolentSprites
                         targeted[this] = seagull;
                     }
                 }
-            if (target == null || Mathf.Sqrt(dist) > maxDist)
+            if (!target)
             {
-                if (!BenevolentSprites.EC_Clean || HasMachines("Placeable_CollectionNet"))
-                    foreach (var net in BenevolentSprites.itemnets)
+                if (!EC_Clean || storage.HasItem("Placeable_CollectionNet") || storage.HasItem("Placeable_CollectionNet_Advanced"))
+                    foreach (var net in itemnets)
                     {
                         if (net == null || targeted.ContainsValue(net) || net.transform.IsRepelled())
                             continue;
@@ -2639,13 +2828,13 @@ namespace BenevolentSprites
                             targeted[this] = net;
                         }
                     }
-                if (BenevolentSprites.ActiveFishingNets() != null && (!BenevolentSprites.EC_Clean || HasMachine("Placeable_FishingNet")))
-                    foreach (var net in BenevolentSprites.ActiveFishingNets())
+                if (ActiveFishingNets() != null && (!EC_Clean || storage.HasItem("Placeable_FishingNet")))
+                    foreach (var net in ActiveFishingNets())
                     {
                         if (!net)
                             continue;
                         var block = net.FishingNet_Block();
-                        if (block == null || targeted.ContainsValue(block) || block.transform.IsRepelled())
+                        if (!block || targeted.ContainsValue(block) || block.transform.IsRepelled())
                             continue;
                         var newDist = (box.transform.position - block.transform.position).sqrMagnitude;
                         if (newDist < dist && net.FishingNet_FishCount() != 0)
@@ -2657,15 +2846,13 @@ namespace BenevolentSprites
                             targeted[this] = block;
                         }
                     }
-                if (BenevolentSprites.dredgers.Count > 0 && (!BenevolentSprites.EC_Clean || HasMachines("Dredger")))
-                    foreach (var dredger in BenevolentSprites.dredgers)
+                if (dredgers.Count > 0 && (!EC_Clean || storage.HasItem("Dredger")))
+                    foreach (var dredger in dredgers)
                     {
-                        if (!dredger)
-                            continue;
                         if (!dredger || targeted.ContainsValue(dredger) || dredger.transform.IsRepelled())
                             continue;
                         var newDist = (box.transform.position - dredger.transform.position).sqrMagnitude;
-                        if (newDist < dist && dredger.Dredger_CurrentItem())
+                        if (newDist < dist && !dredger.Dredger_IsRising() && !dredger.Dredger_IsDropped() && dredger.Dredger_CurrentItem())
                         {
                             target = dredger;
                             targetOffset = Vector3.zero;
@@ -2673,15 +2860,6 @@ namespace BenevolentSprites
                             targeted[this] = dredger;
                         }
                     }
-            }
-            if (target)
-            {
-                if (Mathf.Sqrt(dist) > maxDist)
-                {
-                    target = null;
-                    targetOffset = Vector3.zero;
-                    targeted[this] = null;
-                }
             }
         }
         internal override bool tryInteract()
@@ -2695,7 +2873,7 @@ namespace BenevolentSprites
             var seagull = targetObject.GetComponent<Seagull>();
             var net = targetObject.GetComponentInChildren<ItemCollector>(true);
             var fisher = GetFishNetFromBlock(targetObject);
-            var dredger = BenevolentSprites.dredger_network != null && BenevolentSprites.dredger_network.IsAssignableFrom( targeted[this].GetType());
+            var dredger = dredger_network != null && dredger_network.IsAssignableFrom(targeted[this].GetType());
             if ((net && net.collectedItems.Count == 0) || (seagull && seagull.currentState != SeagullState.Peck))
             {
                 targeted[this] = null;
@@ -2737,8 +2915,11 @@ namespace BenevolentSprites
             else if (dredger)
             {
                 var station = targeted[this];
-                holding.Add(BenevolentSprites.LookupItem(station.Dredger_CurrentItem().UniqueName)); // Have to lookup the item before adding to the sprite's inventory because the dredgers use empty fake items instead of the real items
-                station.Dredger_PickupItem(null);
+                if (!station.Dredger_IsRising() && !station.Dredger_IsDropped() && station.Dredger_CurrentItem())
+                {
+                    holding.Add(LookupItem(station.Dredger_CurrentItem().UniqueName)); // Have to lookup the item before adding to the sprite's inventory because the dredgers use empty fake items instead of the real items
+                    station.Dredger_PickupItem(null);
+                }
             }
             targeted[this] = null;
             return true;
@@ -2766,11 +2947,11 @@ namespace BenevolentSprites
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
         {
-            if (BenevolentSprites.seagulls != null)
-                foreach (var seagull in BenevolentSprites.seagulls)
+            if (seagulls != null)
+                foreach (var seagull in seagulls)
                     if (seagull.ObjectIndex == objectIndex)
                         return seagull;
-            foreach (var net in BenevolentSprites.itemnets)
+            foreach (var net in itemnets)
                 if (net.ObjectIndex == objectIndex)
                     return net;
             foreach (var block in BlockCreator.GetPlacedBlocks())
@@ -2781,7 +2962,7 @@ namespace BenevolentSprites
 
         public static MonoBehaviour GetFishNetFromBlock(Transform block)
         {
-            if (BenevolentSprites.fishingnet != null && block.GetComponent<Block>()?.GetComponent(BenevolentSprites.fishingnet) is MonoBehaviour b)
+            if (fishingnet != null && block.GetComponent<Block>()?.GetComponent(fishingnet) is MonoBehaviour b)
                 return b;
             return null;
         }
@@ -2790,7 +2971,7 @@ namespace BenevolentSprites
     class MechanicSprite : HelperSprite
     {
         static Dictionary<MechanicSprite, TankAccess> targeted = new Dictionary<MechanicSprite, TankAccess>();
-        public override float MaxDistance => base.MaxDistance * BenevolentSprites.MechanicRange;
+        public override float MaxDistance => base.MaxDistance * MechanicRange;
         public MechanicSprite(Storage_Small container, Slot slot, uint objectIndex = 0) : base(container, slot, new Color(0, Random.Range(0.125f, 0.250f), Random.Range(0.875f, 1)), objectIndex)
         {
             targeted.Add(this, null);
@@ -2805,13 +2986,12 @@ namespace BenevolentSprites
         {
             target = null;
             targetOffset = Vector3.zero;
-            if (box.transform.IsRepelled())
-                return;
-            float dist = float.MaxValue;
+            float dist = MaxDistance * MaxDistance;
             targeted[this] = null;
             Item_Base collectionItem = null;
-            if (BenevolentSprites.tanks != null)
-                foreach (var tank in BenevolentSprites.tanks)
+            var storage = GetStorageItems();
+            if (tanks != null)
+                foreach (var tank in tanks)
                 {
                     if (tank.Tank == null || targeted.ContainsValue(tank) || tank.Tank.transform.IsRepelled())
                         continue;
@@ -2826,7 +3006,7 @@ namespace BenevolentSprites
                     collect = collect && !tank.IsConnectedToPipe && tank.Tank.IsConsideredHarvestable() && tank.HarvestAmount > 0;
                     put = put && !tank.Tank.IsFull;
                     if (put && !box.IsOpen)
-                        newCollectionItem = tank.acceptableTypes.Find((x) => box.GetInventoryReference().GetItemCount(x) > (BenevolentSprites.KeepItem > 1 ? 1 : 0) && tank.Tank.FuelValue(x) + tank.Tank.CurrentTankAmount <= tank.Tank.maxCapacity);
+                        newCollectionItem = tank.acceptableTypes.Find((x) => (KeepItem > 1 ? storage.GetItemCount(x.UniqueIndex) > 1 : storage.HasItem(x.UniqueIndex)) && tank.Tank.FuelValue(x) + tank.Tank.CurrentTankAmount <= tank.Tank.maxCapacity);
                     if (collect || (put && newCollectionItem))
                     {
                         collectionItem = newCollectionItem;
@@ -2836,29 +3016,21 @@ namespace BenevolentSprites
                         targeted[this] = tank;
                     }
                 }
-            if (target)
+            if (target && collectionItem)
             {
-                if (Mathf.Sqrt(dist) > MaxDistance)
-                {
-                    target = null;
-                    targetOffset = Vector3.zero;
-                    targeted[this] = null;
-                }
-                else if (collectionItem)
-                {
-                    var tank = targeted[this].Tank;
-                    int c = 0;
-                    var p = new List<ItemInstance>();
-                    foreach (var s in box.GetInventoryReference().allSlots)
-                        if (s.HasValidItemInstance() && s.itemInstance.UniqueIndex == collectionItem.UniqueIndex && !p.Contains(s.itemInstance))
-                        {
-                            p.Add(s.itemInstance);
-                            c += s.itemInstance.UsesInStack;
-                        }
-                    c = Mathf.Min((int)((tank.maxCapacity - tank.CurrentTankAmount) / tank.FuelValue(collectionItem)), c);
-                    holding.AddRange(box.GetInventoryReference().TakeItemUses(collectionItem, c, BenevolentSprites.KeepItem > 1));
-                    box.Close();
-                }
+                var tank = targeted[this].Tank;
+                int c = storage.GetItemCount(collectionItem.UniqueIndex);
+                var p = new List<ItemInstance>();
+                foreach (var s in box.GetInventoryReference().allSlots)
+                    if (s.HasValidItemInstance() && s.itemInstance.UniqueIndex == collectionItem.UniqueIndex && !p.Contains(s.itemInstance))
+                    {
+                        p.Add(s.itemInstance);
+                        c += s.itemInstance.UsesInStack;
+                    }
+                c = Math.Min((int)((tank.maxCapacity - tank.CurrentTankAmount) / tank.FuelValue(collectionItem)), c);
+                storage.Forget(collectionItem.UniqueIndex);
+                holding.AddRange(box.GetInventoryReference().TakeItemUses(collectionItem, c, KeepItem > 1));
+                storage.CloseWithoutClear();
             }
         }
         internal override bool tryInteract()
@@ -2889,7 +3061,7 @@ namespace BenevolentSprites
                     }
                 }
                 if (item != null)
-                    c = Mathf.Min(c, holding.Join((x) => (x.UniqueName == item.UniqueName) ? (item.MaxUses > 1 ? x.UsesInStack : x.Amount) : 0, (x, y) => x + y));
+                    c = Math.Min(c, holding.Join((x) => (x.UniqueName == item.UniqueName) ? (item.MaxUses > 1 ? x.UsesInStack : x.Amount) : 0, (x, y) => x + y));
             }
             else if (tank.Tank.IsConsideredHarvestable())
             {
@@ -2922,7 +3094,7 @@ namespace BenevolentSprites
             if (string.IsNullOrEmpty(data))
                 return;
             var id = int.Parse(data);
-            foreach (var tank in BenevolentSprites.tanks)
+            foreach (var tank in tanks)
                 if (tank.Receiver.transform == targetObject && tank.Tank.tankID == id)
                     targeted[this] = tank;
         }
@@ -2933,8 +3105,8 @@ namespace BenevolentSprites
 
         public override MonoBehaviour_ID FindTarget(uint objectIndex)
         {
-            if (BenevolentSprites.tanks != null)
-                foreach (var tank in BenevolentSprites.tanks)
+            if (tanks != null)
+                foreach (var tank in tanks)
                     if (tank.Receiver.ObjectIndex == objectIndex)
                         return tank.Receiver;
             return base.FindTarget(objectIndex);
@@ -2946,20 +3118,10 @@ namespace BenevolentSprites
         public Light glow;
         void Update()
         {
-            if (glow.enabled != BenevolentSprites.LightMode > 0)
-                glow.enabled = BenevolentSprites.LightMode > 0;
-            if (glow.shadows == LightShadows.None == BenevolentSprites.LightMode > 1)
-                glow.shadows = BenevolentSprites.LightMode > 1 ? LightShadows.Hard : LightShadows.None;
-        }
-    }
-
-    class FaceTowardsCamera : MonoBehaviour
-    {
-        void Update()
-        {
-            var dirVec = Helper.MainCamera.transform.position - transform.position;
-            var angle = Mathf.Acos(dirVec.z / dirVec.XZOnly().magnitude) / (float)Math.PI * 180f + 180;
-            transform.rotation = Quaternion.Euler(0, dirVec.x < 0 ? -angle : angle, 0);
+            if (glow.enabled != LightMode > 0)
+                glow.enabled = LightMode > 0;
+            if (glow.shadows == LightShadows.None == LightMode > 1)
+                glow.shadows = LightMode > 1 ? LightShadows.Hard : LightShadows.None;
         }
     }
 
@@ -2983,18 +3145,19 @@ namespace BenevolentSprites
     {
         static void Postfix(Storage_Small __instance)
         {
-            if (BenevolentSprites.gameLoaded && Raft_Network.IsHost)
+            if (gameLoaded && Raft_Network.IsHost)
             {
+                HelperSprite.GetStorageItems(__instance).Clear();
                 foreach (var slot in __instance.GetInventoryReference().allSlots)
                     if (slot.HasSprite())
                     {
                         var s = slot.GetSprite();
                         if (s == null || s.dying)
                         {
-                            if (slot.itemInstance.TryGetValue(BenevolentSprites.dataKey, out var data))
-                                BenevolentSprites.CreateSprite(data);
+                            if (slot.itemInstance.TryGetValue(dataKey, out var data))
+                                CreateSprite(data);
                             else
-                                BenevolentSprites.CreateSprite(__instance, slot);
+                                CreateSprite(__instance, slot);
                         }
                     }
             }
@@ -3006,22 +3169,22 @@ namespace BenevolentSprites
     {
         static void Postfix(Storage_Small __instance)
         {
-            BenevolentSprites.gameLoaded = true;
+            gameLoaded = true;
             int i = -1;
             string str = "";
-            foreach (var message in BenevolentSprites.waiting)
+            foreach (var message in waiting)
                 try
                 {
                     i++;
-                    BenevolentSprites.ProcessMessage(message);
+                    ProcessMessage(message);
                 }
                 catch (Exception e)
                 {
-                    str += "\n" + i + "/" + BenevolentSprites.waiting.Count + "\n | Message type: " + MessageValues.getName(message.appBuildID) + "\n | Stacktrace : " + e.StackTrace;
+                    str += "\n" + i + "/" + waiting.Count + "\n | Message type: " + MessageValues.getName(message.appBuildID) + "\n | Stacktrace : " + e.StackTrace;
                 }
             if (str.Length != 0)
                 Debug.LogWarning("Some queued messages failed:" + str);
-            BenevolentSprites.waiting.Clear();
+            waiting.Clear();
         }
     }
 
@@ -3035,13 +3198,13 @@ namespace BenevolentSprites
             var sprite = slot.GetSprite();
             __state = sprite != null && !sprite.dying;
             if (__state)
-                slot.itemInstance.SetValue(BenevolentSprites.dataKey, new Message_Sprite_Recreate(sprite, true).Message.password);
+                slot.itemInstance.SetValue(dataKey, new Message_Sprite_Recreate(sprite, true).Message.password);
             //Debug.Log("Sprite data: " + slot.itemInstance.exclusiveString.Length);
         }
         static void Postfix(bool __state, Slot slot)
         {
             if (__state)
-                slot.itemInstance.RemoveValue(BenevolentSprites.dataKey);
+                slot.itemInstance.RemoveValue(dataKey);
         }
     }
 
@@ -3072,9 +3235,9 @@ namespace BenevolentSprites
         }
         static void Clear(ItemInstance item)
         {
-            if (item.UniqueName.IsSprite() && BenevolentSprites.gameLoaded)
+            if (item.UniqueName.IsSprite() && gameLoaded)
             {
-                item.RemoveValue(BenevolentSprites.dataKey);
+                item.RemoveValue(dataKey);
             }
         }
     }
@@ -3091,12 +3254,12 @@ namespace BenevolentSprites
     {
         [HarmonyPatch("Start")]
         [HarmonyPostfix]
-        static void Start(AI_NetworkBehaviour_Domestic_Resource __instance) => BenevolentSprites.animals.Add(__instance);
+        static void Start(AI_NetworkBehaviour_Domestic_Resource __instance) => animals.Add(__instance);
 
 
         [HarmonyPatch("OnDestroy")]
         [HarmonyPostfix]
-        static void OnDestroy(AI_NetworkBehaviour_Domestic_Resource __instance) => BenevolentSprites.animals.Remove(__instance);
+        static void OnDestroy(AI_NetworkBehaviour_Domestic_Resource __instance) => animals.Remove(__instance);
     }
 
     [HarmonyPatch(typeof(NetworkIDManager), new[] { typeof(MonoBehaviour_ID_Network), typeof(Type), typeof(NetworkIDTag) })]
@@ -3107,9 +3270,9 @@ namespace BenevolentSprites
         static void Add(MonoBehaviour_ID_Network networkID, NetworkIDTag tag)
         {
             if (networkID is Seagull)
-                BenevolentSprites.seagulls.Add((Seagull)networkID);
+                seagulls.Add((Seagull)networkID);
             if (tag == NetworkIDTag.ChickenEgg && networkID is PickupItem_Networked)
-                BenevolentSprites.eggs.Add((PickupItem_Networked)networkID);
+                eggs.Add((PickupItem_Networked)networkID);
         }
 
 
@@ -3118,9 +3281,9 @@ namespace BenevolentSprites
         static void Remove(MonoBehaviour_ID_Network networkID, NetworkIDTag tag)
         {
             if (networkID is Seagull)
-                BenevolentSprites.seagulls.Remove((Seagull)networkID);
+                seagulls.Remove((Seagull)networkID);
             if (tag == NetworkIDTag.ChickenEgg && networkID is PickupItem_Networked)
-                BenevolentSprites.eggs.Remove((PickupItem_Networked)networkID);
+                eggs.Remove((PickupItem_Networked)networkID);
         }
     }
 
@@ -3131,27 +3294,27 @@ namespace BenevolentSprites
         static void Postfix(Block __instance)
         {
             if (__instance is Block_Foundation_ItemNet)
-                BenevolentSprites.itemnets.Add((Block_Foundation_ItemNet)__instance);
+                itemnets.Add((Block_Foundation_ItemNet)__instance);
             if (__instance.GetComponent<BeeHive>())
-                BenevolentSprites.beehives.Add(__instance.GetComponent<BeeHive>());
+                beehives.Add(__instance.GetComponent<BeeHive>());
             if (__instance.GetComponent<CookingTable_Recipe_UI>())
-                BenevolentSprites.recipes.Add(__instance.GetComponent<CookingTable_Recipe_UI>());
+                recipes.Add(__instance.GetComponent<CookingTable_Recipe_UI>());
             if (__instance.GetComponent<CookingTable>())
-                BenevolentSprites.tables.Add(__instance.GetComponent<CookingTable>());
+                tables.Add(__instance.GetComponent<CookingTable>());
             if (__instance.GetComponent<Block_CookingStand>())
-                BenevolentSprites.stands.Add(__instance.GetComponent<Block_CookingStand>());
+                stands.Add(__instance.GetComponent<Block_CookingStand>());
             foreach (var c in __instance.GetComponents<MonoBehaviour_ID_Network>())
             {
                 foreach (var ta in c.FindAll<Tank[]>())
                     foreach (var t in ta)
-                        if (t != null && !BenevolentSprites.tanks.Exists((x) => x.Tank == t))
-                            try { BenevolentSprites.tanks.Add(new TankAccess(t)); } catch (Exception e) { if (fails.Add(t + " on " + __instance)) Debug.LogError("Failed to generate access data for " + t + " on " + __instance + "\n" + e); }
+                        if (t != null && !tanks.Exists((x) => x.Tank == t))
+                            try { tanks.Add(new TankAccess(t)); } catch (Exception e) { if (fails.Add(t + " on " + __instance)) Debug.LogError("Failed to generate access data for " + t + " on " + __instance + "\n" + e); }
                 foreach (var t in c.FindAll<Tank>())
-                    if (t != null && !BenevolentSprites.tanks.Exists((x) => x.Tank == t))
-                        try { BenevolentSprites.tanks.Add(new TankAccess(t)); } catch (Exception e) { if (fails.Add(t + " on " + __instance)) Debug.LogError("Failed to generate access data for " + t + " on " + __instance + "\n" + e); }
+                    if (t != null && !tanks.Exists((x) => x.Tank == t))
+                        try { tanks.Add(new TankAccess(t)); } catch (Exception e) { if (fails.Add(t + " on " + __instance)) Debug.LogError("Failed to generate access data for " + t + " on " + __instance + "\n" + e); }
             }
-            if (BenevolentSprites.dredger_network != null && __instance.networkedBehaviour && BenevolentSprites.dredger_network.IsAssignableFrom(__instance.networkedBehaviour.GetType()))
-                BenevolentSprites.dredgers.Add(__instance.networkedBehaviour);
+            if (dredger_network != null && __instance.networkedBehaviour && dredger_network.IsAssignableFrom(__instance.networkedBehaviour.GetType()))
+                dredgers.Add(__instance.networkedBehaviour);
         }
     }
 
@@ -3223,7 +3386,7 @@ namespace BenevolentSprites
     {
         static void Postfix(LanguageSourceData __instance, ref int __result)
         {
-            if (__result == -1 && __instance == BenevolentSprites.language)
+            if (__result == -1 && __instance == language)
                 __result = 0;
         }
     }
@@ -3282,7 +3445,7 @@ namespace BenevolentSprites
             get => stand == null ? 0 : stand.ObjectIndex;
             set
             {
-                foreach (var s in BenevolentSprites.stands)
+                foreach (var s in stands)
                     if (s.ObjectIndex == value)
                     {
                         stand = s;
@@ -3381,8 +3544,30 @@ namespace BenevolentSprites
 
         public bool Equals(CookingSlotTargets target)
         {
-            return target.ObjectIndex == ObjectIndex && slotInds.Any(x => target.slotInds.Contains(x));
+            //Debug.Log($"{target.ObjectIndex} == {ObjectIndex} && [{target.slotInds.Join()}] overlaps [{slotInds.Join()}]");
+            if (ObjectIndex != target.ObjectIndex)
+                return false;
+            var len = slotInds.Length;
+            if ((len == 0) != (target.slotInds.Length == 0))
+                return false;
+            if (len == 0)
+                return true;
+            unsafe
+            {
+                fixed (int* a1 = slotInds)
+                fixed (int* a2 = target.slotInds)
+                {
+                    var e1 = a1 + len;
+                    var e2 = a2 + target.slotInds.Length;
+                    for (var p1 = a1; p1 < e1; p1++)
+                        for (var p2 = a2; p2 < e2; p2++)
+                            if (*p1 == *p2)
+                                return true;
+                }
+            }
+            return false;
         }
+        public override int GetHashCode() => ObjectIndex.GetHashCode();
 
         public static implicit operator CookingSlotTargets(CookingSlot slot) => new CookingSlotTargets(slot);
         public static implicit operator CookingSlotTargets(List<CookingSlot> slots) => new CookingSlotTargets(slots);
@@ -3466,7 +3651,7 @@ namespace BenevolentSprites
             [ClearFish] = typeof(Message_Sprite_ClearFish),
             [RequestMissing] = typeof(Message_Sprite_RequestMissing)
         };
-        public static Network_Player DummyPlayer = BenevolentSprites.CreateFakePlayer();
+        public static Network_Player DummyPlayer = CreateFakePlayer();
 
         public static string getName(int msgId)
         {
@@ -3539,10 +3724,10 @@ namespace BenevolentSprites
         {
             get
             {
-                foreach (var sprite in BenevolentSprites.sprites)
+                foreach (var sprite in sprites)
                     if (sprite.ObjectIndex == spriteIndex)
                         return sprite;
-                BenevolentSprites.MissingIndecies.Add(spriteIndex);
+                MissingIndecies.Add(spriteIndex);
                 Debug.LogWarning($"[Benevolent Sprites]: Failed to find sprite with index {spriteIndex}");
                 return null;
             }
@@ -3560,7 +3745,7 @@ namespace BenevolentSprites
             boxIndex = sprite.box.ObjectIndex;
             slotIndex = sprite.box.GetInventoryReference().allSlots.IndexOf(sprite.store);
         }
-        public override void Use() => BenevolentSprites.CreateSprite(Box, Slot, SpriteIndex);
+        public override void Use() => CreateSprite(Box, Slot, SpriteIndex);
     }
 
     [Serializable]
@@ -3572,10 +3757,10 @@ namespace BenevolentSprites
         {
             get
             {
-                foreach (var sprite in BenevolentSprites.sprites)
+                foreach (var sprite in sprites)
                     if (sprite.ObjectIndex == spriteIndex)
                         return sprite;
-                BenevolentSprites.MissingIndecies.Add(spriteIndex);
+                MissingIndecies.Add(spriteIndex);
                 Debug.LogWarning($"[Benevolent Sprites]: Failed to find sprite with index {spriteIndex}");
                 return null;
             }
@@ -3602,7 +3787,7 @@ namespace BenevolentSprites
         {
             get
             {
-                foreach (var sprite in BenevolentSprites.sprites)
+                foreach (var sprite in sprites)
                     if (sprite.ObjectIndex == spriteIndex)
                         return sprite;
                 Debug.LogWarning($"[Benevolent Sprites]: Failed to find sprite with index {spriteIndex}");
@@ -3711,7 +3896,7 @@ namespace BenevolentSprites
         {
             get
             {
-                foreach (var stand in BenevolentSprites.stands)
+                foreach (var stand in stands)
                     if (stand.ObjectIndex == standIndex)
                         return stand;
                 Debug.LogWarning($"[Benevolent Sprites]: Failed to find cooking stand with index {standIndex}");
@@ -3770,7 +3955,7 @@ namespace BenevolentSprites
             get
             {
                 if (type == 1)
-                    foreach (var stand in BenevolentSprites.stands)
+                    foreach (var stand in stands)
                         if (stand.ObjectIndex == objectIndex)
                             return stand.fuel;
                 if (type == 2)
@@ -3805,7 +3990,7 @@ namespace BenevolentSprites
     class Message_Sprite_InsertTable : Message_Sprite
     {
         public CookingTable Table => NetworkIDManager.GetNetworkIDFromObjectIndex<CookingTable>(tableIndex);
-        public SO_CookingTable_Recipe Recipe => BenevolentSprites.GetRecipeFromIndex(recipeIndex);
+        public SO_CookingTable_Recipe Recipe => GetRecipeFromIndex(recipeIndex);
         [SerializeField]
         uint tableIndex;
         [SerializeField]
@@ -3876,7 +4061,7 @@ namespace BenevolentSprites
         {
             var net = CleanerSprite.GetFishNetFromBlock(netBlock.transform);
             foreach (var c in net.FishingNet_CaughtFish())
-                if (c && BenevolentSprites.arashiObjectEnabler.IsAssignableFrom(c.GetType()))
+                if (c && arashiObjectEnabler.IsAssignableFrom(c.GetType()))
                     c.FishObjectEnabler_DisableModels();
             var a = net.FishingNet_CaughtFishItem();
             for (int i = 0; i < a.Length; i++)
@@ -3895,7 +4080,7 @@ namespace BenevolentSprites
         public override void Use()
         {
             var msgs = new List<Message>();
-            foreach (var s in BenevolentSprites.sprites)
+            foreach (var s in sprites)
                 if (MissingIndecies.Contains(s.ObjectIndex))
                     msgs.Add(new Message_Sprite_Recreate(s, false).Message);
             new Packet_Multiple(EP2PSend.k_EP2PSendReliable) { messages = msgs.ToArray() }.Send(new CSteamID(steamId));
@@ -4048,4 +4233,23 @@ namespace BenevolentSprites
         Method
     }
 
+
+    [HarmonyPatch(typeof(BlockCreator), "RemoveBlockCoroutine", methodType: MethodType.Enumerator )]
+    class Patch_DestroyBlocks
+    {
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            var code = instructions.ToList();
+            code.InsertRange(code.FindIndex(code.FindIndex(x => x.operand is MethodInfo m && m.Name == "DestroyBlock"), x => x.operand is MethodInfo m && m.Name == "ToList") + 1, new[]
+            {
+                new CodeInstruction(OpCodes.Dup),
+                new CodeInstruction(OpCodes.Call,AccessTools.Method(typeof(Patch_DestroyBlocks),nameof(OnBlocksRemoved)))
+            });
+            return code;
+        }
+        static void OnBlocksRemoved(List<Block> blocks)
+        {
+            // do stuff
+        }
+    }
 }
