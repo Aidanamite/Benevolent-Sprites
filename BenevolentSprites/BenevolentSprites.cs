@@ -1564,6 +1564,7 @@ namespace BenevolentSprites
     {
         Storage_Small box;
         Dictionary<int, int> counts = new Dictionary<int, int>();
+        HashSet<string> failedNames = new HashSet<string>();
         public CachedItemCollection(Storage_Small storage)
         {
             box = storage;
@@ -1573,7 +1574,10 @@ namespace BenevolentSprites
         public void Clear()
         {
             if (!PreventClear)
+            {
                 counts.Clear();
+                failedNames.Clear();
+            }
         }
         public void CloseWithoutClear()
         {
@@ -1587,7 +1591,16 @@ namespace BenevolentSprites
                 PreventClear = false;
             }
         }
-        public int GetItemCount(string name) => GetItemCount(LookupItem(name).UniqueIndex);
+        public int GetItemCount(string name)
+        {
+            if (failedNames.Contains(name))
+                return 0;
+            var item = LookupItem(name);
+            if (item)
+                return GetItemCount(item.UniqueIndex);
+            failedNames.Add(name);
+            return 0;
+        }
         public int GetItemCount(int index)
         {
             if (counts.TryGetValue(index, out var result) && result != -1)
@@ -1660,7 +1673,16 @@ namespace BenevolentSprites
                     counts[index[i]] = result[i];
             return result;
         }
-        public bool HasItem(string name) => HasItem(LookupItem(name).UniqueIndex);
+        public bool HasItem(string name)
+        {
+            if (failedNames.Contains(name))
+                return false;
+            var item = LookupItem(name);
+            if (item)
+                return HasItem(item.UniqueIndex);
+            failedNames.Add(name);
+            return false;
+        }
         public bool HasItem(int index)
         {
             if (counts.TryGetValue(index, out var result))
@@ -2372,7 +2394,7 @@ namespace BenevolentSprites
                 if (!stand || stand is Block_CookingStand_Purifier || (box.transform.position - stand.transform.position).sqrMagnitude > maxDist * 1.2 || stand.transform.IsRepelled())
                     continue;
                 var f = 0;
-                if (!box.IsOpen && stand.fuel)
+                if (!box.IsOpen && stand.fuel && stand.fuel.fuelItem)
                     f = Math.Max(Math.Min(stand.fuel.Missing() - InboundFuel(stand), storage.GetItemCount(stand.fuel.fuelItem.UniqueIndex) - (KeepItem > 1 ? 1 : 0)), 0);
                 foreach (var slot in stand.cookingSlots)
                 {
