@@ -2836,7 +2836,7 @@ namespace BenevolentSprites
                 }
             if (!target)
             {
-                if (!EC_Clean || storage.HasItem("Placeable_CollectionNet") || storage.HasItem("Placeable_CollectionNet_Advanced"))
+                if (!EC_Clean || storage.HasItem("Placeable_CollectionNet_Basic") || storage.HasItem("Placeable_CollectionNet_Advanced"))
                     foreach (var net in itemnets)
                     {
                         if (net == null || targeted.ContainsValue(net) || net.transform.IsRepelled())
