@@ -1565,6 +1565,7 @@ namespace BenevolentSprites
         Storage_Small box;
         Dictionary<int, int> counts = new Dictionary<int, int>();
         HashSet<string> failedNames = new HashSet<string>();
+        Dictionary<Type, int[]> indecies = new Dictionary<Type, int[]>();
         public CachedItemCollection(Storage_Small storage)
         {
             box = storage;
@@ -1577,6 +1578,7 @@ namespace BenevolentSprites
             {
                 counts.Clear();
                 failedNames.Clear();
+                indecies.Clear();
             }
         }
         public void CloseWithoutClear()
@@ -1702,6 +1704,59 @@ namespace BenevolentSprites
                         break;
                 }
             counts[index] = 0;
+            return false;
+        }
+        public bool HasAnyItem(params int[] index)
+        {
+            var found = new bool[index.Length];
+            var flag = true;
+            unsafe
+            {
+                fixed (int* ia = index)
+                fixed (bool* fa = found)
+                {
+                    var e = ia + index.Length;
+                    var pp = ia;
+                    var fp = fa;
+                    while (pp < e)
+                    {
+                        if (counts.TryGetValue(*pp, out var num)) {
+                            if (num != 0)
+                                return true;
+                            *fp = true;
+                        }
+                        else
+                            flag = false;
+                        pp++;
+                        fp++;
+                    }
+                }
+            }
+            if (flag)
+                return false;
+            var inter = box.GetInventoryReference().allSlots.GetInternal();
+            var len = box.GetInventoryReference().allSlots.Count;
+            if (len != 0)
+                foreach (var i in inter)
+                {
+                    if (i.HasValidItemInstance())
+                    {
+                        var ind = FastIndexOf(index, i.itemInstance.UniqueIndex);
+                        if (ind == -1)
+                            continue;
+                        if (!found[ind])
+                        {
+                            counts[i.itemInstance.UniqueIndex] = -1;
+                            return true;
+                        }
+                    }
+                    len--;
+                    if (len == 0)
+                        break;
+                }
+            for (int i = 0; i < found.Length; i++)
+                if (!found[i])
+                    counts[index[i]] = 0;
             return false;
         }
 
@@ -2868,7 +2923,7 @@ namespace BenevolentSprites
                             targeted[this] = block;
                         }
                     }
-                if (dredgers.Count > 0 && (!EC_Clean || storage.HasItem("Dredger")))
+                if (dredgers.Count > 0 && (!EC_Clean || storage.HasItem("Placeable_Dredger_Manual") || storage.HasItem("Placeable_Dredger_Electric")))
                     foreach (var dredger in dredgers)
                     {
                         if (!dredger || targeted.ContainsValue(dredger) || dredger.transform.IsRepelled())
