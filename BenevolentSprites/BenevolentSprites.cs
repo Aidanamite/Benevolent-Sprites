@@ -2923,7 +2923,7 @@ namespace BenevolentSprites
                             targeted[this] = block;
                         }
                     }
-                if (dredgers.Count > 0 && (!EC_Clean || storage.HasItem("Placeable_Dredger_Manual") || storage.HasItem("Placeable_Dredger_Electric")))
+                if (dredgers.Count > 0 && (!EC_Clean || storage.HasItem("Dredger_Manual") || storage.HasItem("Dredger_Electric")))
                     foreach (var dredger in dredgers)
                     {
                         if (!dredger || targeted.ContainsValue(dredger) || dredger.transform.IsRepelled())
