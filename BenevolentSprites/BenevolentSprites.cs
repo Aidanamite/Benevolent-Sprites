@@ -22,6 +22,9 @@ using Random = UnityEngine.Random;
 using static BenevolentSprites.BenevolentSprites;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using SerializationHelper;
+using Unity.Netcode;
+using System.Text;
 
 namespace BenevolentSprites
 {
@@ -34,7 +37,7 @@ namespace BenevolentSprites
                 item = itemLookup[name] = ItemManager.GetItemByName(name);
             return item;
         }
-        static BenevolentSprites self = null;
+        public static BenevolentSprites self = null;
         public static List<HelperSprite> sprites = new List<HelperSprite>();
         static MethodInfo _getRecipes = typeof(CookingTable).GetMethod("GetRecipeFromIndex",~BindingFlags.Default);
         public static SO_CookingTable_Recipe GetRecipeFromIndex(int ind) => (SO_CookingTable_Recipe)_getRecipes.Invoke(System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(CookingTable)),new object[] { ind });
@@ -60,7 +63,7 @@ namespace BenevolentSprites
         public static Type dredger_basket;
         public static Type dredger_network;
         Harmony harmony;
-        public static List<Message_InitiateConnection> waiting = new List<Message_InitiateConnection>();
+        public static List<(Message_Sprite, Network_UserId)> waiting = new List<(Message_Sprite, Network_UserId)>();
         public static bool gameLoaded = false;
         public static Item_Base repellentItem;
         public static Dictionary<string, Item_Base> spriteItems = new Dictionary<string, Item_Base>();
@@ -172,7 +175,6 @@ namespace BenevolentSprites
         }
         public void Start()
         {
-            AccessorAttribute.ApplyAll();
             self = this;
             if (SceneManager.GetActiveScene().name != Raft_Network.MenuSceneName)
             {
@@ -235,8 +237,8 @@ namespace BenevolentSprites
                     foreach (var rend in newPrefabs[i].GetComponentsInChildren<MeshRenderer>())
                     {
                         rend.material = new Material(rend.material);
-                        var tex = ((Texture2D)rend.material.GetTexture(298)).GetReadable();
-                        rend.material.SetTexture(298, tex);
+                        var tex = ((Texture2D)rend.material.GetTexture("_Diffuse")).GetReadable();
+                        rend.material.SetTexture("_Diffuse", tex);
                         repelTexture(tex);
                     }
                 newPrefabs[i].name = repellentItem.UniqueName;
@@ -387,8 +389,11 @@ namespace BenevolentSprites
             }
             foreach (var o in createdObjects)
                 if (o)
+                {
+                    if (o is Item_Base i)
+                        RAPI.UnregisterItem(i);
                     DestroyImmediate(o);
-            ItemManager.GetAllItems().RemoveAll(x => !x);
+                }
             createdObjects.Clear();
             Log("Mod has been unloaded!");
         }
@@ -426,24 +431,14 @@ namespace BenevolentSprites
             HelperSprite newFire = (HelperSprite)spriteTypes[item.itemInstance.UniqueName].Invoke(new object[] { box, item, SpriteIndex });
             sprites.Add(newFire);
             if (Raft_Network.IsHost)
-                new Message_Sprite_Create(newFire).Message.Broadcast();
+                new Message_Sprite_Create(newFire).Broadcast();
             return newFire;
-        }
-        public static HelperSprite CreateSprite(Message_InitiateConnection message)
-        {
-            var data = Message_Sprite.CreateFrom(message) as Message_Sprite_Create;
-            if (data != null)
-            {
-                data.Use();
-                return data.Sprite;
-            }
-            return null;
         }
         public static HelperSprite CreateSprite(string data)
         {
             //Debug.Log("Restoring sprite from serial");
-            var msg = Message_Sprite.CreateFrom(new Message_InitiateConnection(0, MessageValues.Recreate, data)) as Message_Sprite_Recreate;
-            msg.Use();
+            var msg = Message_Sprite.Deserialize(data) as Message_Sprite_Recreate;
+            msg.Use(default);
             return msg.Sprite;
         }
 
@@ -469,29 +464,29 @@ namespace BenevolentSprites
                     }
             if (MissingIndecies.Count > 0)
             {
-                new Message_Sprite_RequestMissing(MissingIndecies.ToArray()).Message.Send(ComponentManager<Raft_Network>.Value.HostID);
+                new Message_Sprite_RequestMissing(MissingIndecies.ToArray()).Send(ComponentManager<Raft_Network>.Value.HostID);
                 MissingIndecies.Clear();
             }
         }
-        static NetworkChannel ModUtils_Channel = (NetworkChannel)MessageValues.ChannelID;
-        bool ModUtils_MessageRecieved(CSteamID steamID, NetworkChannel channel, Message message)
+
+        public override bool OnNetworkMessage(object message, Network_UserId from, string modslug)
         {
-            if (message.Type == MessageValues.MessageID && message is Message_InitiateConnection)
+            if (message is Message_Sprite msg)
             {
                 if (gameLoaded)
-                    ProcessMessage(message as Message_InitiateConnection);
+                    ProcessMessage(msg,from);
                 else
-                    waiting.Add(message as Message_InitiateConnection);
+                    waiting.Add((msg,from));
                 return true;
             }
             return false;
         }
 
-        public static void ProcessMessage(Message_InitiateConnection msg)
+        public static void ProcessMessage(Message_Sprite msg, Network_UserId from)
         {
             try
             {
-                Message_Sprite.CreateFrom(msg).Use();
+                msg.Use(from);
             }
             catch (Exception e)
             {
@@ -499,15 +494,12 @@ namespace BenevolentSprites
             }
         }
 
-        public override void WorldEvent_OnPlayerConnected(CSteamID steamid, RGD_Settings_Character characterSettings)
+        public override void WorldEvent_OnPlayerConnected(Network_UserId userid, RGD_Settings_Character characterSettings)
         {
             if (Raft_Network.IsHost)
             {
-                var pkt = new Packet_Multiple(EP2PSend.k_EP2PSendReliable) { messages = new Message[sprites.Count] };
-                var i = 0;
                 foreach (var sprite in sprites)
-                    pkt.messages[i++] = new Message_Sprite_Recreate(sprite, false).Message;
-                pkt.Send(steamid);
+                    new Message_Sprite_Recreate(sprite, false).Send(userid);
             }
         }
         public override void WorldEvent_WorldLoaded()
@@ -574,7 +566,7 @@ namespace BenevolentSprites
             return "";
         }
 
-        public override void WorldEvent_WorldUnloaded()
+        public override void Event_ReturnToMainMenu()
         {
             gameLoaded = false;
             itemnets.Clear();
@@ -687,7 +679,7 @@ namespace BenevolentSprites
             var tempInv = tempObj.AddComponent<PlayerInventory>();
             tempInv.hotslotCount = 1;
             tempInv.hotbar = tempObj.AddComponent<Hotbar>();
-            tempInv.SetInventoryPickup(tempObj.AddComponent<InventoryPickup>());
+            tempInv.inventoryPickup = tempObj.AddComponent<InventoryPickup>();
             var tempTxt = new GameObject().AddComponent<Text>();
             for (int i = 0; i < 20; i++)
             {
@@ -710,9 +702,9 @@ namespace BenevolentSprites
             g.SetActive(false);
             DontDestroyOnLoad(g);
             var DummyPlayer = g.AddComponent<Network_Player>();
-            DummyPlayer.SetAnimator(g.AddComponent<PlayerAnimator>());
+            DummyPlayer.animator = g.AddComponent<PlayerAnimator>();
             if (setLocal)
-                DummyPlayer.SetIsLocalPlayer(true);
+                DummyPlayer.isLocalPlayer = true;
             return DummyPlayer;
         }
 
@@ -725,45 +717,6 @@ namespace BenevolentSprites
         static Dictionary<Slot, Storage_Small> refs = new Dictionary<Slot, Storage_Small>();
         static Dictionary<SO_ItemYield, List<Item_Base>> yieldCache = new Dictionary<SO_ItemYield, List<Item_Base>>();
 
-        [Accessor(AccessorType.Field, typeof(Cropplot), "plantManager")]
-        public static PlantManager plantManager(this Cropplot plot) => default;
-        [Accessor(AccessorType.Field, typeof(PlayerInventory), "inventoryPickup")]
-        public static void SetInventoryPickup(this PlayerInventory inv, InventoryPickup value) { }
-        [Accessor(AccessorType.Field, typeof(Network_Player), "animator")]
-        public static void SetAnimator(this Network_Player player, PlayerAnimator value) { }
-        [Accessor(AccessorType.Field, typeof(Network_Player), "isLocalPlayer")]
-        public static void SetIsLocalPlayer(this Network_Player player, bool value) { }
-        [Accessor(AccessorType.Method, typeof(CookingTable), "StartCooking")]
-        public static bool StartCooking(this CookingTable table, SO_CookingTable_Recipe recipe) => default;
-        [Accessor(AccessorType.Method, typeof(CookingTable), "SetAnimationState")]
-        public static IEnumerator SetAnimationState(this CookingTable table, bool state, float delay) => default;
-        [Accessor(AccessorType.Field, typeof(CookingTable), "startAnimDelay")]
-        public static float StartAnimDelay(this CookingTable table) => default;
-        [Accessor(AccessorType.Field, typeof(CookingTable), "gooModel")]
-        public static GameObject GooModel(this CookingTable table) => default;
-        [Accessor(AccessorType.Field, typeof(CookingTable), "finishedModel")]
-        public static GameObject FinishedModel(this CookingTable table) => default;
-        [Accessor(AccessorType.Field, typeof(CookingTable), "pickupFoodItem")]
-        public static Item_Base PickupFoodItem(this CookingTable table) => default;
-        [Accessor(AccessorType.Field, typeof(Slot), "inventory")]
-        public static Inventory Inventory(this Slot slot) => default;
-        [Accessor(AccessorType.Field, typeof(RandomDropper), "randomDropperAsset")]
-        public static SO_RandomDropper RandomDropperAsset(this RandomDropper dropper) => default;
-        [Accessor(AccessorType.Field, typeof(SoundManager), "eventRef_UI_MoveItem")]
-        public static string MoveItemEventRef(this SoundManager sm) => default;
-        [Accessor(AccessorType.Method, typeof(BeeHive), "HarvestYield")]
-        public static void HarvestYield(this BeeHive hive, Network_Player player) { }
-        [Accessor(AccessorType.Field, typeof(BirdsNest), "eggItem")]
-        public static Item_Base EggItem(this BirdsNest nest) => default;
-        [Accessor(AccessorType.Field, typeof(BirdsNest), "featherItem")]
-        public static Item_Base FeatherItem(this BirdsNest nest) => default;
-        [Accessor(AccessorType.Field, typeof(ItemNet), "itemCollector")]
-        public static ItemCollector ItemCollector(this ItemNet net) => default;
-        [Accessor(AccessorType.Method, typeof(ItemCollector), "ClearCollectedItems")]
-        public static void ClearCollectedItems(this ItemCollector collector, Network_Player player) { }
-
-        [Accessor(AccessorType.Field, typeof(List<Slot>), "_items")]
-        public static Slot[] GetInternal(this List<Slot> slots) => default;
 
         public static void SetupFishingNetMethods()
         {
@@ -920,7 +873,7 @@ namespace BenevolentSprites
             table.CurrentRecipe = recipe;
             table.CookTimer = 0f;
             table.Portions = 0;
-            table.StartCoroutine(table.SetAnimationState(true, table.StartAnimDelay()));
+            table.StartCoroutine(table.SetAnimationState(true, table.startAnimDelay));
             if (table is CookingTable_Pot p)
                 p.Fuel.StartBurning();
             return null;
@@ -937,8 +890,8 @@ namespace BenevolentSprites
             if (table.Portions == 0)
             {
                 table.CurrentRecipe = null;
-                table.GooModel().SetActive(false);
-                table.FinishedModel().SetActive(false);
+                table.gooModel.SetActive(false);
+                table.finishedModel.SetActive(false);
             }
         }
 
@@ -953,7 +906,7 @@ namespace BenevolentSprites
         {
             if (refs.TryGetValue(slot, out var box) && box != null)
                 return box;
-            var inv = slot.Inventory();
+            var inv = slot.inventory;
             foreach (var storage in StorageManager.allStorages)
                 if (storage.GetInventoryReference() == inv)
                 {
@@ -1297,7 +1250,7 @@ namespace BenevolentSprites
                 foreach (var item in pickup.yieldHandler.yieldAsset.GetAllPossible())
                     loot.AddUniqueOnly(item);
             if (pickup.dropper)
-                foreach (var item in pickup.dropper.RandomDropperAsset().randomizer.items)
+                foreach (var item in pickup.dropper.randomDropperAsset.randomizer.items)
                     if (item.obj)
                         loot.AddUniqueOnly((Item_Base)item.obj);
             if (pickup.itemInstance != null)
@@ -1350,11 +1303,11 @@ namespace BenevolentSprites
         {
             if (pickup.stopTrackUseRPC)
             {
-                PickupObjectManager.RemovePickupItemNetwork(pickup, new CSteamID(0));
+                PickupObjectManager.RemovePickupItemNetwork(pickup, default);
             }
             else
             {
-                PickupObjectManager.RemovePickupItem(pickup, new CSteamID(0));
+                PickupObjectManager.RemovePickupItem(pickup, default);
             }
         }
 
@@ -1392,15 +1345,9 @@ namespace BenevolentSprites
             return false;
         }
 
-        public static void Broadcast(this Message message, NetworkChannel channel = (NetworkChannel)MessageValues.ChannelID) => ComponentManager<Raft_Network>.Value.RPC(message, Target.Other, EP2PSend.k_EP2PSendReliable, channel);
-        public static void Send(this Message message, CSteamID steamID, NetworkChannel channel = (NetworkChannel)MessageValues.ChannelID) => ComponentManager<Raft_Network>.Value.SendP2P(steamID, message, EP2PSend.k_EP2PSendReliable, channel);
-        public static void Broadcast(this Packet_Multiple message, NetworkChannel channel = (NetworkChannel)MessageValues.ChannelID) => ComponentManager<Raft_Network>.Value.RPC(message, Target.Other, channel);
-        public static void Send(this Packet message, CSteamID steamID, NetworkChannel channel = (NetworkChannel)MessageValues.ChannelID) {
-            if (message is Packet_Single single)
-                ComponentManager<Raft_Network>.Value.SendP2P(steamID, single, channel);
-            else
-                ComponentManager<Raft_Network>.Value.SendP2P(steamID, message as Packet_Multiple, channel);
-        }
+        public static void Broadcast(this Message message, NetworkChannel channel = NetworkChannel.Channel_Game) => ComponentManager<Raft_Network>.Value.RPC(message, Target.Other, EP2PSend.k_EP2PSendReliable, channel);
+        public static void Send(this Message message, Network_UserId steamID, NetworkChannel channel = NetworkChannel.Channel_Game) => ComponentManager<Raft_Network>.Value.SendP2P(steamID, message, EP2PSend.k_EP2PSendReliable, channel);
+        
 
         public static void SetValue(this ItemInstance item, string valueKey, string value)
         {
@@ -1608,17 +1555,9 @@ namespace BenevolentSprites
             if (counts.TryGetValue(index, out var result) && result != -1)
                 return result;
             result = 0;
-            var inter = box.GetInventoryReference().allSlots.GetInternal();
-            var len = box.GetInventoryReference().allSlots.Count;
-            if (len != 0)
-                foreach (var i in inter)
-                {
-                    if (i.HasValidItemInstance() && i.itemInstance.UniqueIndex == index)
-                        result += i.itemInstance.Amount;
-                    len--;
-                    if (len == 0)
-                        break;
-                }
+            foreach (var i in box.GetInventoryReference().allSlots)
+                if (i.HasValidItemInstance() && i.itemInstance.UniqueIndex == index)
+                    result += i.itemInstance.Amount;
             return counts[index] = result;
         }
         public int[] GetItemCounts(params int[] index)
@@ -1653,22 +1592,14 @@ namespace BenevolentSprites
             }
             if (flag)
                 return result;
-            var inter = box.GetInventoryReference().allSlots.GetInternal();
-            var len = box.GetInventoryReference().allSlots.Count;
-            if (len != 0)
-                foreach (var i in inter)
+            foreach (var i in box.GetInventoryReference().allSlots)
+                if (i.HasValidItemInstance())
                 {
-                    if (i.HasValidItemInstance())
-                    {
-                        var ind = FastIndexOf(index, i.itemInstance.UniqueIndex);
-                        if (ind == -1)
-                            continue;
-                        if (!found[ind])
-                            result[ind] += i.itemInstance.Amount;
-                    }
-                    len--;
-                    if (len == 0)
-                        break;
+                    var ind = FastIndexOf(index, i.itemInstance.UniqueIndex);
+                    if (ind == -1)
+                        continue;
+                    if (!found[ind])
+                        result[ind] += i.itemInstance.Amount;
                 }
             for (int i = 0; i < found.Length; i++)
                 if (!found[i])
@@ -1689,19 +1620,11 @@ namespace BenevolentSprites
         {
             if (counts.TryGetValue(index, out var result))
                 return result != 0;
-            var inter = box.GetInventoryReference().allSlots.GetInternal();
-            var len = box.GetInventoryReference().allSlots.Count;
-            if (len != 0)
-                foreach (var i in inter)
+            foreach (var i in box.GetInventoryReference().allSlots)
+                if (i.HasValidItemInstance() && i.itemInstance.UniqueIndex == index)
                 {
-                    if (i.HasValidItemInstance() && i.itemInstance.UniqueIndex == index)
-                    {
-                        counts[index] = -1;
-                        return true;
-                    }
-                    len--;
-                    if (len == 0)
-                        break;
+                    counts[index] = -1;
+                    return true;
                 }
             counts[index] = 0;
             return false;
@@ -1734,25 +1657,17 @@ namespace BenevolentSprites
             }
             if (flag)
                 return false;
-            var inter = box.GetInventoryReference().allSlots.GetInternal();
-            var len = box.GetInventoryReference().allSlots.Count;
-            if (len != 0)
-                foreach (var i in inter)
+            foreach (var i in box.GetInventoryReference().allSlots)
+                if (i.HasValidItemInstance())
                 {
-                    if (i.HasValidItemInstance())
+                    var ind = FastIndexOf(index, i.itemInstance.UniqueIndex);
+                    if (ind == -1)
+                        continue;
+                    if (!found[ind])
                     {
-                        var ind = FastIndexOf(index, i.itemInstance.UniqueIndex);
-                        if (ind == -1)
-                            continue;
-                        if (!found[ind])
-                        {
-                            counts[i.itemInstance.UniqueIndex] = -1;
-                            return true;
-                        }
+                        counts[i.itemInstance.UniqueIndex] = -1;
+                        return true;
                     }
-                    len--;
-                    if (len == 0)
-                        break;
                 }
             for (int i = 0; i < found.Length; i++)
                 if (!found[i])
@@ -1922,7 +1837,7 @@ namespace BenevolentSprites
                 return;
             SetTarget(target.transform, position);
             if (Raft_Network.IsHost)
-                new Message_Sprite_SetTarget(this, target, position).Message.Broadcast();
+                new Message_Sprite_SetTarget(this, target, position).Broadcast();
         }
 
         public void Update(float t)
@@ -1950,7 +1865,7 @@ namespace BenevolentSprites
             if (!dying)
             {
                 if (Raft_Network.IsHost)
-                    new Message_Sprite_Kill(this).Message.Broadcast();
+                    new Message_Sprite_Kill(this).Broadcast();
                 CoroutineManager.Singleton.StartCoroutine(Death());
             }
         }
@@ -2033,8 +1948,8 @@ namespace BenevolentSprites
                     storage.CloseWithoutClear();
                     if (PlaySounds)
                     {
-                        var eventRef = ComponentManager<SoundManager>.Value.MoveItemEventRef();
-                        var msg = new Message_SoundManager_PlayOneShot(Messages.SoundManager_PlayOneShot, ComponentManager<Raft_Network>.Value.NetworkIDManager, ComponentManager<SoundManager>.Value.ObjectIndex, eventRef, box.transform.position);
+                        var eventRef = ComponentManager<SoundManager>.Value.er_UI_MoveItem;
+                        var msg = new Message_SoundManager_PlayOneShot(Messages.SoundManager_PlayOneShot, ComponentManager<Raft_Network>.Value.NetworkIDManager, ComponentManager<SoundManager>.Value.ObjectIndex, eventRef.ToString(), box.transform.position);
                         msg.Broadcast();
                         FMODUnity.RuntimeManager.PlayOneShot(eventRef, msg.Position);
                     }
@@ -2091,8 +2006,8 @@ namespace BenevolentSprites
                 return false;
             holding.AddRange(targeted[this].plant.pickupComponent.GetAllItems());
             var seed = targeted[this].plant.item.UniqueIndex;
-            targetObject.GetComponent<Cropplot>().plantManager().Harvest(targeted[this].plant, false);
-            new Message_HarvestPlant(Messages.PlantManager_HarvestPlant, targetObject.GetComponent<Cropplot>().plantManager(), targeted[this].plant, false).Broadcast(NetworkChannel.Channel_Game);
+            targetObject.GetComponent<Cropplot>().plantManager.Harvest(targeted[this].plant, false);
+            new Message_HarvestPlant(Messages.PlantManager_HarvestPlant, targetObject.GetComponent<Cropplot>().plantManager, targeted[this].plant, false).Broadcast();
             foreach (var item in holding)
                 if (item.baseItem.UniqueIndex == seed)
                 {
@@ -2148,8 +2063,8 @@ namespace BenevolentSprites
         static void PlantSeed(Cropplot crop, int ItemIndex)
         {
             var msg = new Message_Sprite_PlantSeed(crop, ItemIndex, SaveAndLoad.GetUniqueObjectIndex(), ComponentManager<WeatherManager>.Value.GetCurrentWeatherType() == UniqueWeatherType.Rain);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         bool ExclusiveCollect(Plant plant, CachedItemCollection items)
@@ -2330,7 +2245,7 @@ namespace BenevolentSprites
             else if (beehive)
             {
                 holding.AddAll(beehive.CurrentHoneyLevel.yield.yieldAssets);
-                new Message_NetworkBehaviour_ID_SteamID(Messages.BeeHiveHarvestOutput, ComponentManager<Raft_Network>.Value.NetworkIDManager, beehive.ObjectIndex, new CSteamID(0)).Broadcast();
+                new Message_NetworkBehaviour_ID_SteamID(Messages.BeeHiveHarvestOutput, ComponentManager<Raft_Network>.Value.NetworkIDManager, beehive.ObjectIndex, default).Broadcast();
                 beehive.HarvestYield(null);
             }
             else if (nest)
@@ -2338,14 +2253,14 @@ namespace BenevolentSprites
                 var b = ExclusiveCollect(nest, GetStorageItems());
                 if (nest.HasEgg && b.Item1)
                 {
-                    var item = nest.EggItem();
+                    var item = nest.eggItem;
                     holding.Add(new ItemInstance(item, nest.EggCount, item.MaxUses));
                     while (nest.PickupEgg(null))
                         new Message_NetworkBehaviour_SteamID(Messages.BirdsNest_PickupEgg, nest, 0).Broadcast();
                 }
                 if (nest.HasFeather && b.Item2)
                 {
-                    var item = nest.FeatherItem();
+                    var item = nest.featherItem;
                     holding.Add(new ItemInstance(item, nest.FeatherCount, item.MaxUses));
                     while (nest.PickupFeather(null))
                         new Message_NetworkBehaviour_SteamID(Messages.BirdsNest_PickupFeather, nest, 0).Broadcast();
@@ -2387,8 +2302,8 @@ namespace BenevolentSprites
             if (!EC_Animal3)
                 return (true,true);
             return (
-                nest.HasEgg && storage.HasItem(nest.EggItem().UniqueIndex),
-                nest.HasFeather && storage.HasItem(nest.FeatherItem().UniqueIndex)
+                nest.HasEgg && storage.HasItem(nest.eggItem.UniqueIndex),
+                nest.HasFeather && storage.HasItem(nest.featherItem.UniqueIndex)
                 );
         }
 
@@ -2606,22 +2521,22 @@ namespace BenevolentSprites
         static void ClearItem(Block_CookingStand stand, CookingSlot slot)
         {
             var msg = new Message_Sprite_ClearCooker(stand, slot);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         static void InsertItem(CookingSlotTargets slots, Item_Base item)
         {
             var msg = new Message_Sprite_InsertCooker(slots, item);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         static void AddFuel(Block_CookingStand stand, int amount)
         {
             var msg = new Message_Sprite_AddFuel(stand, amount);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         static int InboundFuel(Block_CookingStand stand)
@@ -2681,7 +2596,7 @@ namespace BenevolentSprites
                     var newDist = (box.transform.position - table.transform.position).sqrMagnitude;
                     if (newDist >= (fueling ? maxDist : dist))
                         continue;
-                    var collectionItem = table.PickupFoodItem();
+                    var collectionItem = table.pickupFoodItem;
                     //GetSystemTimeAsFileTime(out var end);
                     //var span = end - start;
                     //if (span > 100000)
@@ -2796,7 +2711,7 @@ namespace BenevolentSprites
             }
             else if (target.Portions != 0)
             {
-                var item = target.PickupFoodItem();
+                var item = target.pickupFoodItem;
                 var amount = (int)target.Portions;
                 if (item)
                 {
@@ -2813,23 +2728,23 @@ namespace BenevolentSprites
         static void AddFuel(CookingTable table, int amount)
         {
             var msg = new Message_Sprite_AddFuel(table, amount);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         static List<ItemInstance> ForceStart(CookingTable table, SO_CookingTable_Recipe recipe, List<Item_Base> itemsToUse)
         {
             var result = table.ForceStart(recipe, itemsToUse);
             var msg = new Message_Sprite_InsertTable(table, recipe);
-            msg.Message.Broadcast();
+            msg.Broadcast();
             return result;
         }
 
         static void RemoveTablePortions(CookingTable table, int amount)
         {
             var msg = new Message_Sprite_ClearTable(table,amount);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         public override void RestoreData(string data)
@@ -2960,7 +2875,7 @@ namespace BenevolentSprites
                 return false;
             if (seagull)
             {
-                seagull.entityComponent.Damage(5f, seagull.transform.position, Vector3.down, EntityType.Enemy);
+                seagull.entityComponent.Damage(5f, seagull.transform.position, Vector3.down, EntityType.Enemy, false);
                 if (seagull.entityComponent.IsDead)
                 {
                     holding.AddRange(seagull.pickupItemChanneling.pickupItem.GetAllItems());
@@ -3005,15 +2920,15 @@ namespace BenevolentSprites
         static void ClearAll(ItemCollector collector)
         {
             var msg = new Message_Sprite_ClearAll(collector);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         static void ClearFish(Block net)
         {
             var msg = new Message_Sprite_ClearFish(net);
-            msg.Use();
-            msg.Message.Broadcast();
+            msg.Use(default);
+            msg.Broadcast();
         }
 
         public override void RestoreData(string data)
@@ -3253,11 +3168,11 @@ namespace BenevolentSprites
                 try
                 {
                     i++;
-                    ProcessMessage(message);
+                    ProcessMessage(message.Item1,message.Item2);
                 }
                 catch (Exception e)
                 {
-                    str += "\n" + i + "/" + waiting.Count + "\n | Message type: " + MessageValues.getName(message.appBuildID) + "\n | Stacktrace : " + e.StackTrace;
+                    str += "\n" + i + "/" + waiting.Count + "\n | Message type: " + message.Item1.GetType().Name + "\n | Stacktrace : " + e.StackTrace;
                 }
             if (str.Length != 0)
                 Debug.LogWarning("Some queued messages failed:" + str);
@@ -3275,7 +3190,7 @@ namespace BenevolentSprites
             var sprite = slot.GetSprite();
             __state = sprite != null && !sprite.dying;
             if (__state)
-                slot.itemInstance.SetValue(dataKey, new Message_Sprite_Recreate(sprite, true).Message.password);
+                slot.itemInstance.SetValue(dataKey, new Message_Sprite_Recreate(sprite, true).Serialize());
             //Debug.Log("Sprite data: " + slot.itemInstance.exclusiveString.Length);
         }
         static void Postfix(bool __state, Slot slot)
@@ -3659,16 +3574,16 @@ namespace BenevolentSprites
 
         public MonoBehaviour_ID_Network Receiver => receiver;
         public Tank Tank => tank;
-        public List<Item_Base> acceptableOutputTypes => GetOutput(tank);
-        public List<Item_Base> acceptableTypes => GetInput(tank);
-        public float currentTankAmount { get => GetAmount(tank); set => tank.ModifyTankRPC(value - GetAmount(tank), null); }
-        public Tank.TankAcceptance tankAcceptance => GetAcceptance(tank);
+        public List<Item_Base> acceptableOutputTypes => tank.acceptableOutputTypes;
+        public List<Item_Base> acceptableTypes => tank.acceptableTypes;
+        public float currentTankAmount { get => tank.CurrentTankAmount; set => tank.ModifyTankRPC(value - tank.CurrentTankAmount, null); }
+        public Tank.TankAcceptance tankAcceptance => tank.tankAcceptance;
         public bool HasOutput => isExtractorOutput || (tank.TankHasOutput() && tankAcceptance == Tank.TankAcceptance.Output);
         public bool HasInput => tank.TankHasInput() && tankAcceptance == Tank.TankAcceptance.Input;
         public bool IsConnectedToPipe => pipes != null && pipes.Any(x => x?.pipeGroup?.GetPipes()?.Count > 1);
-        public int HarvestAmount => extractor ? GetHarvestAmount(extractor) : 0;
-        public Item_Base OutputItem => GetOutputItem(extractor);
-        public TankAccess(Tank Tank) : this(GetReciever(Tank), Tank) { }
+        public int HarvestAmount => extractor ? extractor.HarvestAmount() : 0;
+        public Item_Base OutputItem => extractor.itemTypeOnHarvest;
+        public TankAccess(Tank Tank) : this(Tank.messageReciever, Tank) { }
         public TankAccess(MonoBehaviour_ID_Network Reciever, Tank Tank)
         {
             receiver = Reciever;
@@ -3679,100 +3594,38 @@ namespace BenevolentSprites
             pipes = tank.GetComponentInParent<Block>()?.GetComponentsInChildren<PipeSocket_Tank>().ToList().FindAll(x => x.socketType.ToString().StartsWith("Output_") && x.connectedTank == tank).ToArray();
         }
 
-        [Accessor(AccessorType.Field, typeof(Tank), "messageReciever")]
-        static MonoBehaviour_ID_Network GetReciever(Tank tank) => default;
-        [Accessor(AccessorType.Field, typeof(Tank),"acceptableOutputTypes")]
-        static List<Item_Base> GetOutput(Tank tank) => default;
-        [Accessor(AccessorType.Field, typeof(Tank), "acceptableTypes")]
-        static List<Item_Base> GetInput(Tank tank) => default;
-        [Accessor(AccessorType.Field, typeof(Tank), "currentTankAmount")]
-        static float GetAmount(Tank tank) => default;
-        [Accessor(AccessorType.Field, typeof(Tank), "tankAcceptance")]
-        static Tank.TankAcceptance GetAcceptance(Tank tank) => default;
-        [Accessor(AccessorType.Field, typeof(Placeable_Extractor), "itemTypeOnHarvest")]
-        static Item_Base GetOutputItem(Placeable_Extractor extractor) => default;
-        [Accessor(AccessorType.Method, typeof(Placeable_Extractor), "HarvestAmount")]
-        static int GetHarvestAmount(Placeable_Extractor extractor) => default;
-    }
-
-    public static class MessageValues
-    {
-        public const int ChannelID = 8;
-        public const Messages MessageID = (Messages)23468;
-        public const int Create = 0;
-        public const int Target = 1;
-        public const int Kill = 2;
-        public const int Recreate = 3;
-        public const int PlantSeed = 4;
-        public const int ClearCooker = 5;
-        public const int InsertCooker = 6;
-        public const int AddFuel = 7;
-        public const int InsertTable = 8;
-        public const int ClearTable = 9;
-        public const int ClearAll = 10;
-        public const int ClearFish = 11;
-        public const int RequestMissing = 12;
-        public static Dictionary<int, Type> MessageTypes = new Dictionary<int, Type>
-        {
-            [Create] = typeof(Message_Sprite_Create),
-            [Target] = typeof(Message_Sprite_SetTarget),
-            [Kill] = typeof(Message_Sprite_Kill),
-            [Recreate] = typeof(Message_Sprite_Recreate),
-            [PlantSeed] = typeof(Message_Sprite_PlantSeed),
-            [ClearCooker] = typeof(Message_Sprite_ClearCooker),
-            [InsertCooker] = typeof(Message_Sprite_InsertCooker),
-            [AddFuel] = typeof(Message_Sprite_AddFuel),
-            [InsertTable] = typeof(Message_Sprite_InsertTable),
-            [ClearTable] = typeof(Message_Sprite_ClearTable),
-            [ClearAll] = typeof(Message_Sprite_ClearAll),
-            [ClearFish] = typeof(Message_Sprite_ClearFish),
-            [RequestMissing] = typeof(Message_Sprite_RequestMissing)
-        };
-        public static Network_Player DummyPlayer = CreateFakePlayer();
-
-        public static string getName(int msgId)
-        {
-            switch (msgId)
-            {
-                case Create:
-                    return "Create Sprite";
-                case Target:
-                    return "Set Sprite Target";
-                case Kill:
-                    return "Kill Sprite";
-                case Recreate:
-                    return "Create Sprite from Serial";
-                case PlantSeed:
-                    return "Plant Seed";
-                case ClearCooker:
-                    return "Empty Cooking Stand Slots";
-                case InsertCooker:
-                    return "Set Cooking Stand Slots";
-                case AddFuel:
-                    return "Add Fuel";
-                case InsertTable:
-                    return "Insert Cooking Table Recipe";
-                case ClearTable:
-                    return "Empty Cooking Table";
-                case ClearAll:
-                    return "Empty Item Net";
-                case ClearFish:
-                    return "Empty Fishing Net";
-                case RequestMissing:
-                    return "Request Missing Sprites";
-            }
-            return "Unknown (" + msgId + ")";
-        }
-    }
-
-    abstract class Message_Sprite
-    {
-        public Message_InitiateConnection Message => new Message_InitiateConnection(MessageValues.MessageID, MessageValues.MessageTypes.First(x => x.Value == this.GetType()).Key, JsonUtility.ToJson(this));
-        public abstract void Use();
-        public static Message_Sprite CreateFrom(Message_InitiateConnection message) => (Message_Sprite)JsonUtility.FromJson(message.password, MessageValues.MessageTypes[message.appBuildID]);
     }
 
     [Serializable]
+    public abstract class Message_Sprite
+    {
+        public static Network_Player DummyPlayer = CreateFakePlayer();
+        public abstract void Use(Network_UserId from);
+
+        public void Send(Network_UserId userid) => self.SendNetworkMessageToPlayer(this, userid);
+        public void Broadcast() => self.SendNetworkMessage(this);
+
+        public string Serialize()
+        {
+            byte[] bytes;
+            using (var buffer = new FastBufferWriter(0, Unity.Collections.Allocator.Temp))
+            {
+                ModSerialization.SerializeObject(this, buffer, true);
+                bytes = buffer.ToArray();
+            }
+            if (bytes.Length % 2 != 0)
+                Array.Resize(ref bytes, bytes.Length + 1);
+            return Encoding.Unicode.GetString(bytes);
+        }
+
+        public static Message_Sprite Deserialize(string data)
+        {
+
+            using (var buffer = new FastBufferReader(Encoding.Unicode.GetBytes(data), Unity.Collections.Allocator.Temp))
+                return (Message_Sprite)ModSerialization.DeserializeObject(typeof(Message_Sprite), buffer);
+        }
+    }
+
     class Message_Sprite_Create : Message_Sprite
     {
         public Storage_Small Box
@@ -3822,10 +3675,9 @@ namespace BenevolentSprites
             boxIndex = sprite.box.ObjectIndex;
             slotIndex = sprite.box.GetInventoryReference().allSlots.IndexOf(sprite.store);
         }
-        public override void Use() => CreateSprite(Box, Slot, SpriteIndex);
+        public override void Use(Network_UserId from) => CreateSprite(Box, Slot, SpriteIndex);
     }
 
-    [Serializable]
     class Message_Sprite_SetTarget : Message_Sprite
     {
         public Vector3 Offset => targetOffset;
@@ -3854,10 +3706,9 @@ namespace BenevolentSprites
             targetIndex = Target.ObjectIndex;
             targetOffset = TargetOffset;
         }
-        public override void Use() => Sprite.SetTargetNetwork(Target, Offset);
+        public override void Use(Network_UserId from) => Sprite.SetTargetNetwork(Target, Offset);
     }
 
-    [Serializable]
     class Message_Sprite_Kill : Message_Sprite
     {
         public HelperSprite Sprite
@@ -3877,10 +3728,9 @@ namespace BenevolentSprites
         {
             spriteIndex = sprite.ObjectIndex;
         }
-        public override void Use() => Sprite.Kill();
+        public override void Use(Network_UserId from) => Sprite.Kill();
     }
 
-    [Serializable]
     class Message_Sprite_Recreate : Message_Sprite_Create
     {
         public Vector3 Offset => targetOffset;
@@ -3907,9 +3757,9 @@ namespace BenevolentSprites
                 saveData = sprite.GenerateData();
             }
         }
-        public override void Use()
+        public override void Use(Network_UserId from)
         {
-            base.Use();
+            base.Use(from);
             try
             {
                 var sprite = Sprite;
@@ -3927,7 +3777,6 @@ namespace BenevolentSprites
         }
     }
 
-    [Serializable]
     class Message_Sprite_PlantSeed : Message_Sprite
     {
         public Cropplot Plot
@@ -3959,14 +3808,13 @@ namespace BenevolentSprites
             objectIndex = ObjectIndex;
             water = WaterCrop;
         }
-        public override void Use()
+        public override void Use(Network_UserId from)
         {
             var crop = Plot;
-            crop.plantManager().PlantSeed(crop, crop.plantManager().GetPlantByIndex(ItemIndex), ObjectIndex, WaterCrop, false);
+            crop.plantManager.PlantSeed(crop, crop.plantManager.GetPlantByIndex(ItemIndex), ObjectIndex, WaterCrop, false);
         }
     }
 
-    [Serializable]
     class Message_Sprite_ClearCooker : Message_Sprite
     {
         public Block_CookingStand Stand
@@ -3990,16 +3838,15 @@ namespace BenevolentSprites
             standIndex = Stand.ObjectIndex;
             slotIndex = Stand.GetIndexOfCookingSlot(Slot);
         }
-        public override void Use()
+        public override void Use(Network_UserId from)
         {
             var stand = Stand;
             Patch_PlayerAnimator.disable = true;
-            stand.CollectItem(stand.cookingSlots[Slot], MessageValues.DummyPlayer);
+            stand.CollectItem(stand.cookingSlots[Slot], DummyPlayer);
             Patch_PlayerAnimator.disable = false;
         }
     }
 
-    [Serializable]
     class Message_Sprite_InsertCooker : Message_Sprite
     {
         public CookingSlotTargets Slots => new CookingSlotTargets() { slotInds = slotInds, ObjectIndex = objInd };
@@ -4016,15 +3863,14 @@ namespace BenevolentSprites
             objInd = Slots.ObjectIndex;
             itemIndex = Item.UniqueIndex;
         }
-        public override void Use()
+        public override void Use(Network_UserId from)
         {
             Patch_PlayerAnimator.disable = true;
-            Slots.stand.InsertItem(Item, Slots.Slots.ToArray(), MessageValues.DummyPlayer);
+            Slots.stand.InsertItem(Item, Slots.Slots.ToArray(), DummyPlayer);
             Patch_PlayerAnimator.disable = false;
         }
     }
 
-    [Serializable]
     class Message_Sprite_AddFuel : Message_Sprite
     {
         public Fuel Fuel
@@ -4060,10 +3906,9 @@ namespace BenevolentSprites
             amount = Amount;
             type = 2;
         }
-        public override void Use() => Fuel.AddFuel(Amount);
+        public override void Use(Network_UserId from) => Fuel.AddFuel(Amount);
     }
 
-    [Serializable]
     class Message_Sprite_InsertTable : Message_Sprite
     {
         public CookingTable Table => NetworkIDManager.GetNetworkIDFromObjectIndex<CookingTable>(tableIndex);
@@ -4077,10 +3922,9 @@ namespace BenevolentSprites
             tableIndex = Table.ObjectIndex;
             recipeIndex = (int)Recipe.RecipeIndex;
         }
-        public override void Use() => Table.ForceStart(Recipe);
+        public override void Use(Network_UserId from) => Table.ForceStart(Recipe);
     }
 
-    [Serializable]
     class Message_Sprite_ClearTable : Message_Sprite
     {
         public CookingTable Table => NetworkIDManager.GetNetworkIDFromObjectIndex<CookingTable>(tableIndex);
@@ -4094,10 +3938,9 @@ namespace BenevolentSprites
             tableIndex = Table.ObjectIndex;
             amount = Amount;
         }
-        public override void Use() => Table.Remove(Amount);
+        public override void Use(Network_UserId from) => Table.Remove(Amount);
     }
 
-    [Serializable]
     class Message_Sprite_ClearAll : Message_Sprite
     {
         public ItemCollector Collector
@@ -4114,10 +3957,9 @@ namespace BenevolentSprites
         [SerializeField]
         uint collectorIndex;
         public Message_Sprite_ClearAll(ItemCollector Collector) => collectorIndex = Collector.ObjectIndex;
-        public override void Use() => Collector.ClearCollectedItems(null);
+        public override void Use(Network_UserId from) => Collector.ClearCollectedItems(null);
     }
 
-    [Serializable]
     class Message_Sprite_ClearFish : Message_Sprite
     {
         public Block netBlock
@@ -4134,7 +3976,7 @@ namespace BenevolentSprites
         [SerializeField]
         uint fisherIndex;
         public Message_Sprite_ClearFish(Block block) => fisherIndex = block.ObjectIndex;
-        public override void Use()
+        public override void Use(Network_UserId from)
         {
             var net = CleanerSprite.GetFishNetFromBlock(netBlock.transform);
             foreach (var c in net.FishingNet_CaughtFish())
@@ -4148,23 +3990,20 @@ namespace BenevolentSprites
         }
     }
 
-    [Serializable]
     class Message_Sprite_RequestMissing : Message_Sprite
     {
         public uint[] MissingIndecies;
-        public ulong steamId = ComponentManager<Raft_Network>.Value.LocalSteamID.m_SteamID;
         public Message_Sprite_RequestMissing(uint[] missing) => MissingIndecies = missing;
-        public override void Use()
+        public override void Use(Network_UserId from)
         {
             var msgs = new List<Message>();
             foreach (var s in sprites)
                 if (MissingIndecies.Contains(s.ObjectIndex))
-                    msgs.Add(new Message_Sprite_Recreate(s, false).Message);
-            new Packet_Multiple(EP2PSend.k_EP2PSendReliable) { messages = msgs.ToArray() }.Send(new CSteamID(steamId));
+                    new Message_Sprite_Recreate(s, false).Send(from);
         }
     }
 
-    [AttributeUsage(AttributeTargets.Method)]
+    /*[AttributeUsage(AttributeTargets.Method)]
     public class AccessorAttribute : Attribute
     {
         public readonly Type targetType;
@@ -4308,7 +4147,7 @@ namespace BenevolentSprites
     {
         Field,
         Method
-    }
+    }*/
 
 
     [HarmonyPatch(typeof(BlockCreator), "RemoveBlockCoroutine", methodType: MethodType.Enumerator )]

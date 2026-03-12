@@ -1,8 +1,9 @@
 {
   "name": "Benevolent Sprites",
+  "slug": "benevolent-sprites",
   "author": "Aidanamite",
   "description": "Adds some helpful little friends",
-  "version": "1.8.13",
+  "version": "1.8.14",
   "license": "GNU AGPLv3",
   "icon": "icon.png",
   "banner": "banner.jpg",
