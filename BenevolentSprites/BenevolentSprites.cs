@@ -173,6 +173,7 @@ namespace BenevolentSprites
             }
             return sprite;
         }
+
         public void Start()
         {
             self = this;
@@ -437,9 +438,15 @@ namespace BenevolentSprites
         public static HelperSprite CreateSprite(string data)
         {
             //Debug.Log("Restoring sprite from serial");
-            var msg = Message_Sprite.Deserialize(data) as Message_Sprite_Recreate;
-            msg.Use(default);
-            return msg.Sprite;
+            var message = Message_Sprite.Deserialize(data);
+            if (message is Message_Sprite_Recreate msg)
+            {
+                msg.Use(default);
+                return msg.Sprite;
+            }
+            if (message != null)
+                Debug.LogError($"Sprite data returned a {message.GetType().FullName} instead of a {typeof(Message_Sprite_Recreate).FullName}");
+            return null;
         }
 
         public void Update()
@@ -471,6 +478,7 @@ namespace BenevolentSprites
 
         public override bool OnNetworkMessage(object message, Network_UserId from, string modslug)
         {
+            //Debug.Log($"Recieved {message.GetType().FullName} message");
             if (message is Message_Sprite msg)
             {
                 if (gameLoaded)
@@ -522,7 +530,7 @@ namespace BenevolentSprites
                                         CreateSprite(data);
                                     } catch (Exception err)
                                     {
-                                        Debug.LogError($"Failed to create sprite in slot {box.GetInventoryReference().allSlots.IndexOf(slot)} of {box.name} ({box.ObjectIndex})\nRaw Item Data: {slot.itemInstance.exclusiveString}\nExtracted Sprite Data: {data}\n{err}");
+                                        Debug.LogError($"Failed to create sprite in slot {box.GetInventoryReference().allSlots.IndexOf(slot)} of {box.name} ({box.ObjectIndex})\n{err}\nExtracted Sprite Data: {Encoding.Unicode.GetBytes(data).Join(x => x.ToString("X02"), "")}\nRaw Item Data: {Encoding.Unicode.GetBytes(slot.itemInstance.exclusiveString).Join(x => x.ToString("X02"), "")}");
                                         CreateSprite(box, slot);
                                     }
                                 else
@@ -3626,6 +3634,7 @@ namespace BenevolentSprites
         }
     }
 
+    [Serializable]
     class Message_Sprite_Create : Message_Sprite
     {
         public Storage_Small Box
@@ -3678,6 +3687,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => CreateSprite(Box, Slot, SpriteIndex);
     }
 
+    [Serializable]
     class Message_Sprite_SetTarget : Message_Sprite
     {
         public Vector3 Offset => targetOffset;
@@ -3709,6 +3719,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => Sprite.SetTargetNetwork(Target, Offset);
     }
 
+    [Serializable]
     class Message_Sprite_Kill : Message_Sprite
     {
         public HelperSprite Sprite
@@ -3731,6 +3742,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => Sprite.Kill();
     }
 
+    [Serializable]
     class Message_Sprite_Recreate : Message_Sprite_Create
     {
         public Vector3 Offset => targetOffset;
@@ -3777,6 +3789,7 @@ namespace BenevolentSprites
         }
     }
 
+    [Serializable]
     class Message_Sprite_PlantSeed : Message_Sprite
     {
         public Cropplot Plot
@@ -3815,6 +3828,7 @@ namespace BenevolentSprites
         }
     }
 
+    [Serializable]
     class Message_Sprite_ClearCooker : Message_Sprite
     {
         public Block_CookingStand Stand
@@ -3847,6 +3861,7 @@ namespace BenevolentSprites
         }
     }
 
+    [Serializable]
     class Message_Sprite_InsertCooker : Message_Sprite
     {
         public CookingSlotTargets Slots => new CookingSlotTargets() { slotInds = slotInds, ObjectIndex = objInd };
@@ -3871,6 +3886,7 @@ namespace BenevolentSprites
         }
     }
 
+    [Serializable]
     class Message_Sprite_AddFuel : Message_Sprite
     {
         public Fuel Fuel
@@ -3909,6 +3925,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => Fuel.AddFuel(Amount);
     }
 
+    [Serializable]
     class Message_Sprite_InsertTable : Message_Sprite
     {
         public CookingTable Table => NetworkIDManager.GetNetworkIDFromObjectIndex<CookingTable>(tableIndex);
@@ -3925,6 +3942,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => Table.ForceStart(Recipe);
     }
 
+    [Serializable]
     class Message_Sprite_ClearTable : Message_Sprite
     {
         public CookingTable Table => NetworkIDManager.GetNetworkIDFromObjectIndex<CookingTable>(tableIndex);
@@ -3941,6 +3959,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => Table.Remove(Amount);
     }
 
+    [Serializable]
     class Message_Sprite_ClearAll : Message_Sprite
     {
         public ItemCollector Collector
@@ -3960,6 +3979,7 @@ namespace BenevolentSprites
         public override void Use(Network_UserId from) => Collector.ClearCollectedItems(null);
     }
 
+    [Serializable]
     class Message_Sprite_ClearFish : Message_Sprite
     {
         public Block netBlock
@@ -3990,6 +4010,7 @@ namespace BenevolentSprites
         }
     }
 
+    [Serializable]
     class Message_Sprite_RequestMissing : Message_Sprite
     {
         public uint[] MissingIndecies;
