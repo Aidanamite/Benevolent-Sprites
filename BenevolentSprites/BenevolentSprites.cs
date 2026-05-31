@@ -2627,9 +2627,9 @@ namespace BenevolentSprites
                     //    Debug.Log($"Took too long to check collection for {table.instStr()}. Took {span / 10000.0} ms");
                     //GetSystemTimeAsFileTime(out start);
                     var f = 0;
-                    var fC = table.GetComponentInChildren<FuelNetwork>();
+                    var fC = table.GetComponentInChildren<FuelNetwork>()?.Fuel;
                     if (fC)
-                        f = Math.Max(Math.Min(fC.Fuel.Missing(), itemCount.GetItemCount(fC.Fuel.fuelItem.UniqueIndex) - (KeepItem > 1 ? 1 : 0)), 0);
+                        f = Math.Max(Math.Min(fC.Missing(), itemCount.GetItemCount(fC.fuelItem.UniqueIndex) - (KeepItem > 1 ? 1 : 0)), 0);
                     //GetSystemTimeAsFileTime(out end);
                     //span = end - start;
                     //if (span > 100000)
@@ -2638,7 +2638,7 @@ namespace BenevolentSprites
                     {
                         fueling = f != 0;
                         if (fueling)
-                            fuel = new Cost(fC.Fuel.fuelItem, f);
+                            fuel = new Cost(fC.fuelItem, f);
                         else
                             fuel = null;
                         recipe = null;
@@ -2694,19 +2694,19 @@ namespace BenevolentSprites
             if (targetObject.IsRepelled() || box.transform.IsRepelled())
                 return true;
             var target = targeted[this];
-            var f = targetObject.GetComponentInChildren<FuelNetwork>();
-            if (!(f && holding.Contains(f.Fuel.fuelItem) && !f.Fuel.HasMaxFuel()) && (Recipe == null ? target.Portions == 0 : target.CurrentRecipe))
+            var f = targetObject.GetComponentInChildren<FuelNetwork>()?.Fuel;
+            if (!(f && holding.Contains(f.fuelItem) && !f.HasMaxFuel()) && (Recipe == null ? target.Portions == 0 : target.CurrentRecipe))
             {
                 targeted[this] = null;
                 return true;
             }
             if (SqrDistanceFromTarget > sqrInteractDistance)
                 return false;
-            if (f && holding.Contains(f.Fuel.fuelItem) && !f.Fuel.HasMaxFuel())
+            if (f && holding.Contains(f.fuelItem) && !f.HasMaxFuel())
             {
-                var m = Math.Min(f.Fuel.Missing(), holding.GetCount(f.Fuel.fuelItem));
+                var m = Math.Min(f.Missing(), holding.GetCount(f.fuelItem));
                 AddFuel(target, m);
-                holding.Remove(f.Fuel.fuelItem, m, true);
+                holding.Remove(f.fuelItem, m, true);
             }
             if (Recipe)
             {
