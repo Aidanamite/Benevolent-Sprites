@@ -3616,7 +3616,7 @@ namespace BenevolentSprites
         public string Serialize()
         {
             byte[] bytes;
-            using (var buffer = new FastBufferWriter(1000, Unity.Collections.Allocator.Temp))
+            using (var buffer = new FastBufferWriter(256, Unity.Collections.Allocator.Temp, 1024*1024))
             {
                 ModSerialization.SerializeObject(this, buffer, true);
                 bytes = buffer.ToArray();
